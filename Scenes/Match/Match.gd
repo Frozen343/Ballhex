@@ -98,4 +98,5 @@ func _on_match_finished(title: String, detail: String) -> void:
 
 
 func _return_to_menu() -> void:
+	NetworkManager.disconnect_game()
 	SceneRouter.go_to_main_menu()
