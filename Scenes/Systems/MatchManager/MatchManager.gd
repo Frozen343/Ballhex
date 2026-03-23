@@ -227,7 +227,6 @@ func _assign_peer_to_slot(peer_id: int, slot: String) -> void:
 	_lobby_roster[peer_id] = entry
 
 	_apply_online_slot_state()
-	_reset_after_assignment_change()
 	_broadcast_lobby_state()
 
 
@@ -248,6 +247,8 @@ func _apply_online_slot_state() -> void:
 
 func _apply_slot_to_player(player: HexPlayer, spawn_position: Vector2, slot_name: String) -> void:
 	player.set_spawn_position(spawn_position)
+	var previous_owner := player.controller_peer_id
+	var was_active := player.is_field_active()
 	var peer_id := int(_slot_assignments.get(slot_name, -1))
 	if peer_id < 0 or not _lobby_roster.has(peer_id):
 		player.set_controller_peer_id(-1)
@@ -259,20 +260,16 @@ func _apply_slot_to_player(player: HexPlayer, spawn_position: Vector2, slot_name
 	player.set_controller_peer_id(peer_id)
 	player.set_display_name(str(entry.get("name", "Player")))
 	player.set_field_active(true)
-	player.reset_to_spawn()
+	if previous_owner != peer_id or not was_active:
+		player.reset_to_spawn()
 
 
 func _sync_world_activity() -> void:
-	var playing := state_machine.is_in_state(GameEnums.MatchState.PLAYING)
-	_set_world_active(playing)
-	_set_goals_enabled(playing)
-	ball.set_ball_motion_enabled(playing)
-
-
-func _reset_after_assignment_change() -> void:
-	reset_system.reset_world(_players, ball)
-	if state_machine.is_in_state(GameEnums.MatchState.PLAYING):
-		ball.set_ball_motion_enabled(true)
+	var world_active := state_machine.is_in_state(GameEnums.MatchState.PLAYING) or state_machine.is_in_state(GameEnums.MatchState.GOAL_SCORED)
+	var goals_active := state_machine.is_in_state(GameEnums.MatchState.PLAYING)
+	_set_world_active(world_active)
+	_set_goals_enabled(goals_active)
+	ball.set_ball_motion_enabled(world_active)
 
 
 func _build_lobby_entry(peer_id: int, player_name: String, slot: String, is_host_player: bool) -> Dictionary:
@@ -374,7 +371,6 @@ func _on_goal_scored(scoring_team: int, _defending_team: int) -> void:
 
 	state_machine.transition_to(GameEnums.MatchState.GOAL_SCORED)
 	_set_goals_enabled(false)
-	time_system.stop()
 
 	if scoring_team == GameEnums.TeamId.RED:
 		red_score += 1

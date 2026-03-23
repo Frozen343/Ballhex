@@ -3,7 +3,7 @@ class_name MatchBall
 
 @export var radius := GameSettings.BALL_RADIUS
 @export var max_speed := 550.0
-@export var drag := 72.0
+@export var drag := 105.0
 @export var wall_bounce := 0.64
 @export var player_hit_multiplier := 0.22
 @export var kick_impulse_multiplier := 1.08

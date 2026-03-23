@@ -393,7 +393,7 @@ func _on_guest_joined_for_webrtc(peer_id: int) -> void:
 
 func _handle_webrtc_signal(message: Dictionary) -> void:
 	var kind := str(message.get("kind", ""))
-	var peer_id := int(message.get("peerId", 1))
+	var peer_id := _get_connection_peer_id(int(message.get("peerId", 1)))
 
 	match kind:
 		"offer":
@@ -573,6 +573,12 @@ func _sanitize_lobby_name(lobby_name: String) -> String:
 	if cleaned.length() > 32:
 		cleaned = cleaned.substr(0, 32)
 	return cleaned
+
+
+func _get_connection_peer_id(signaling_peer_id: int) -> int:
+	if is_host_player:
+		return signaling_peer_id
+	return 1
 
 
 func _build_http_url(path: String) -> String:
