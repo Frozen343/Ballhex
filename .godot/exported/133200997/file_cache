@@ -8,7 +8,7 @@ res://Scenes/Menus/EndMatchPanel.tscn::617b6f650662ae185bbed70ef0d93180::1774293
 res://Scenes/Menus/MainMenu.tscn::595fe52aef4f68b4bb95cdb0e263168c::1774293009::res://.godot/exported/133200997/export-8a2cd17ba7100c069efc16d196e2654d-MainMenu.scn
 res://Scenes/Menus/PauseMenu.tscn::dc6bf348512cd1e159d86590b0668013::1774293009::res://.godot/exported/133200997/export-ef2249417db3638d9e31f05dde7e215a-PauseMenu.scn
 res://Scenes/Systems/Debug/DebugOverlay.tscn::5993258dac9d20749cce3d2d4dae71cb::1774293009::res://.godot/exported/133200997/export-4cadd546f38e9445d7e9190752fc6b6d-DebugOverlay.scn
-res://Scenes/UI/Hud/MatchHUD.tscn::61cb8a42eb3f4bebc84196125d0d0f4f::1774293009::res://.godot/exported/133200997/export-2bb725060860d677d14568f287dfa4e8-MatchHUD.scn
+res://Scenes/UI/Hud/MatchHUD.tscn::c93a8602f909df7a8dc8745ba3332233::1774298305::res://.godot/exported/133200997/export-2bb725060860d677d14568f287dfa4e8-MatchHUD.scn
 res://Tests/Sandbox/BallTuning.tscn::10686ddeb23c2d2aa4f6af8b3de7a6fc::1774293009::res://.godot/exported/133200997/export-053a13969ca0a8196d583c962e46428b-BallTuning.scn
 res://Tests/Sandbox/CollisionTuning.tscn::4365ef51c5d5a6a48acaaf1d329332e9::1774293009::res://.godot/exported/133200997/export-fe0262b77e87f35296c33f7cfd33f273-CollisionTuning.scn
 res://Scenes/Menus/NicknameScreen.tscn::9182c360773d9c79ccf62d8f2103bada::1774293009::res://.godot/exported/133200997/export-630f0f1b3555c417cba912c4a73dfd2a-NicknameScreen.scn

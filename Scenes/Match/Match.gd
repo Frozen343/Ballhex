@@ -25,6 +25,11 @@ func _process(_delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("pause"):
+		if match_hud.is_chat_focused():
+			# Unfocus chat instead of toggling pause
+			get_viewport().gui_release_focus()
+			get_viewport().set_input_as_handled()
+			return
 		match_manager.toggle_pause()
 		get_viewport().set_input_as_handled()
 		return
@@ -69,6 +74,9 @@ func _connect_ui() -> void:
 	match_manager.match_finished.connect(_on_match_finished)
 	match_manager.state_updated.connect(debug_overlay.set_state_name)
 	match_manager.room_state_changed.connect(pause_menu.update_room_state)
+	match_manager.player_joined.connect(_on_player_joined)
+	match_manager.player_left.connect(_on_player_left)
+	match_manager.chat_message_received.connect(_on_chat_message)
 
 	pause_menu.resume_requested.connect(match_manager.toggle_pause)
 	pause_menu.restart_requested.connect(match_manager.restart_match)
@@ -79,20 +87,31 @@ func _connect_ui() -> void:
 	pause_menu.kick_requested.connect(match_manager.kick_peer)
 	pause_menu.ban_requested.connect(match_manager.ban_peer)
 	pause_menu.toggle_admin_requested.connect(match_manager.toggle_peer_admin)
+	pause_menu.chat_submitted.connect(match_manager.send_chat)
+	pause_menu.randomize_teams_requested.connect(match_manager.randomize_teams)
+
+	match_hud.chat_submitted.connect(match_manager.send_chat)
+	match_hud.chat_focus_changed.connect(_on_chat_focus_changed)
 
 
 func _center_world() -> void:
 	var viewport_size := get_viewport().get_visible_rect().size
+	var chat_height := match_hud.get_chat_panel_height()
+	var scoreboard_height := 44.0
+	var available_height := viewport_size.y - chat_height - scoreboard_height
 	var content_size := Vector2(
 		GameSettings.FIELD_SIZE.x + GameSettings.GOAL_DEPTH * 2.0 + 120.0,
 		GameSettings.FIELD_SIZE.y + 140.0
 	)
 	var scale_factor := minf(
 		(viewport_size.x - 40.0) / content_size.x,
-		(viewport_size.y - 60.0) / content_size.y
+		(available_height - 20.0) / content_size.y
 	)
 	world.scale = Vector2.ONE * minf(scale_factor, 1.0)
-	world.position = viewport_size * 0.5
+	world.position = Vector2(
+		viewport_size.x * 0.5,
+		scoreboard_height + available_height * 0.5
+	)
 
 
 func _on_pause_changed(is_paused: bool) -> void:
@@ -108,6 +127,23 @@ func _on_match_finished(title: String, _detail: String) -> void:
 	pause_menu.show_panel()
 
 
+func _on_player_joined(player_name: String) -> void:
+	match_hud.add_chat_line("%s katildi" % player_name, Color(0.6, 1.0, 0.7, 0.95))
+
+
+func _on_player_left(player_name: String) -> void:
+	match_hud.add_chat_line("%s ayrildi" % player_name, Color(1.0, 0.7, 0.6, 0.95))
+
+
+func _on_chat_message(sender_name: String, message: String) -> void:
+	match_hud.add_chat_line("%s: %s" % [sender_name, message])
+
+
+func _on_chat_focus_changed(focused: bool) -> void:
+	GameSettings.chat_active = focused
+
+
 func _return_to_menu() -> void:
+	GameSettings.chat_active = false
 	NetworkManager.disconnect_game()
 	SceneRouter.go_to_main_menu()

@@ -53,6 +53,7 @@ const INPUT_BINDINGS := {
 
 var debug_overlay_enabled := true
 var player_name := ""
+var chat_active := false
 
 
 func _ready() -> void:

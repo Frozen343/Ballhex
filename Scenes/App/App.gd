@@ -10,6 +10,7 @@ var _current_screen: Node
 
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	SceneRouter.screen_requested.connect(_on_screen_requested)
 	if GameSettings.has_player_name():
 		_show_screen(SceneRouter.SCREEN_MAIN_MENU, {})

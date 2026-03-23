@@ -9,6 +9,9 @@ signal hard_pause_changed(is_hard_paused: bool)
 signal match_finished(title: String, detail: String)
 signal state_updated(state_name: String)
 signal room_state_changed(snapshot: Dictionary)
+signal player_joined(player_name: String)
+signal player_left(player_name: String)
+signal chat_message_received(sender_name: String, message: String)
 
 const PLAYER_SCENE := preload("res://Scenes/Entities/Player/Player.tscn")
 const WORLD_SYNC_INTERVAL := 0.05
@@ -36,6 +39,8 @@ var _goal_reset_remaining := -1.0
 var _sync_accumulator := 0.0
 var _state_before_pause := GameEnums.MatchState.PLAYING
 var _hard_paused := false
+var _last_scoring_team := GameEnums.TeamId.NEUTRAL
+var _kickoff_active := false
 
 
 func _ready() -> void:
@@ -51,6 +56,13 @@ func _process(delta: float) -> void:
 			_goal_reset_remaining = -1.0
 			if _is_authority():
 				force_full_reset()
+
+	if _kickoff_active and _is_authority():
+		if ball.last_touch_team_id != GameEnums.TeamId.NEUTRAL:
+			_end_kickoff()
+
+	if _kickoff_active and _is_authority():
+		_enforce_kickoff_constraints()
 
 	if NetworkManager.is_online and _is_authority():
 		_sync_accumulator += delta
@@ -69,6 +81,8 @@ func start_new_match() -> void:
 	blue_score = 0
 	is_paused = false
 	_hard_paused = false
+	_last_scoring_team = GameEnums.TeamId.NEUTRAL
+	_kickoff_active = false
 	_set_state(GameEnums.MatchState.PLAYING)
 	match_finished.emit("", "")
 	pause_changed.emit(false)
@@ -112,6 +126,8 @@ func toggle_pause() -> void:
 			_set_state(GameEnums.MatchState.MATCH_ENDED)
 		elif _goal_reset_remaining >= 0.0:
 			_set_state(GameEnums.MatchState.GOAL_SCORED)
+		elif _kickoff_active:
+			_set_state(GameEnums.MatchState.KICKOFF)
 		else:
 			_set_state(_state_before_pause if _state_before_pause != GameEnums.MatchState.PAUSED else GameEnums.MatchState.PLAYING)
 	pause_changed.emit(is_paused)
@@ -142,7 +158,13 @@ func force_full_reset() -> void:
 	_configure_goals(not _match_over)
 	if _match_over:
 		_set_state(GameEnums.MatchState.MATCH_ENDED)
+		_kickoff_active = false
+	elif _last_scoring_team != GameEnums.TeamId.NEUTRAL:
+		_kickoff_active = true
+		_set_state(GameEnums.MatchState.KICKOFF)
+		_apply_kickoff_constraints()
 	else:
+		_kickoff_active = false
 		_set_state(GameEnums.MatchState.PLAYING)
 	_broadcast_world_state()
 
@@ -163,6 +185,13 @@ func assign_peer_to_blue(peer_id: int) -> void:
 
 func assign_peer_to_waiting(peer_id: int) -> void:
 	_request_team_assignment(peer_id, GameEnums.TeamId.NEUTRAL)
+
+
+func randomize_teams() -> void:
+	if NetworkManager.is_online and not _is_authority():
+		_rpc_request_randomize_teams.rpc_id(1)
+		return
+	_randomize_teams_authority()
 
 
 func kick_peer(peer_id: int) -> void:
@@ -219,10 +248,16 @@ func _rpc_submit_player_name(player_name: String) -> void:
 		return
 
 	var entry := _get_roster_entry(sender_peer_id)
-	if entry.is_empty():
+	var is_new := entry.is_empty()
+	if is_new:
 		entry = _make_roster_entry(sender_peer_id, clean_name, GameEnums.TeamId.NEUTRAL, false, false)
+	var old_name := str(entry.get("name", ""))
 	entry["name"] = clean_name
 	_roster[sender_peer_id] = entry
+	if is_new or old_name != clean_name:
+		player_joined.emit(clean_name)
+		for pid in NetworkManager.get_connected_peer_ids():
+			_rpc_notify_player_joined.rpc_id(pid, clean_name)
 	_update_field_player_from_roster(sender_peer_id, false)
 	_broadcast_room_state()
 	_broadcast_world_state()
@@ -285,6 +320,16 @@ func _rpc_request_toggle_admin(peer_id: int) -> void:
 	_toggle_peer_admin_authority(peer_id)
 
 
+@rpc("any_peer", "reliable", "call_remote")
+func _rpc_request_randomize_teams() -> void:
+	if not _is_authority():
+		return
+	var sender_peer_id := multiplayer.get_remote_sender_id()
+	if not _can_manage_roster(sender_peer_id):
+		return
+	_randomize_teams_authority()
+
+
 @rpc("authority", "reliable", "call_remote")
 func _rpc_receive_room_state(snapshot: Dictionary) -> void:
 	if _is_authority():
@@ -302,8 +347,53 @@ func _rpc_receive_world_state(snapshot: Dictionary) -> void:
 @rpc("authority", "reliable", "call_remote")
 func _rpc_force_leave(reason: String) -> void:
 	announcement_requested.emit(reason, Color(1.0, 0.72, 0.72, 1.0), 1.25)
-	NetworkManager.disconnect_game()
-	SceneRouter.go_to_main_menu()
+
+
+@rpc("authority", "reliable", "call_remote")
+func _rpc_notify_player_joined(player_name: String) -> void:
+	player_joined.emit(player_name)
+
+
+@rpc("authority", "reliable", "call_remote")
+func _rpc_notify_player_left(player_name: String) -> void:
+	player_left.emit(player_name)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func _rpc_send_chat_message(message: String) -> void:
+	if _is_authority():
+		var sender_peer_id := multiplayer.get_remote_sender_id()
+		var entry := _get_roster_entry(sender_peer_id)
+		var sender_name := str(entry.get("name", "Player"))
+		var clean_message := message.strip_edges().substr(0, 200)
+		if clean_message.is_empty():
+			return
+		chat_message_received.emit(sender_name, clean_message)
+		# Broadcast to all clients
+		for peer_id in NetworkManager.get_connected_peer_ids():
+			_rpc_receive_chat_message.rpc_id(peer_id, sender_name, clean_message)
+	else:
+		_rpc_send_chat_message.rpc_id(1, message)
+
+
+@rpc("authority", "reliable", "call_remote")
+func _rpc_receive_chat_message(sender_name: String, message: String) -> void:
+	chat_message_received.emit(sender_name, message)
+
+
+func send_chat(message: String) -> void:
+	var clean_message := message.strip_edges().substr(0, 200)
+	if clean_message.is_empty():
+		return
+	if not NetworkManager.is_online:
+		chat_message_received.emit(GameSettings.player_name, clean_message)
+		return
+	if _is_authority():
+		chat_message_received.emit(GameSettings.player_name, clean_message)
+		for peer_id in NetworkManager.get_connected_peer_ids():
+			_rpc_receive_chat_message.rpc_id(peer_id, GameSettings.player_name, clean_message)
+	else:
+		_rpc_send_chat_message.rpc_id(1, clean_message)
 
 
 func _connect_core_signals() -> void:
@@ -407,6 +497,24 @@ func _assign_peer_to_team_authority(peer_id: int, team_id: int) -> void:
 	_refresh_ball_player_tracking()
 	_broadcast_room_state()
 	_broadcast_world_state()
+
+
+func _randomize_teams_authority() -> void:
+	# Collect all peer ids (spectators + existing team players)
+	var all_peer_ids: Array = []
+	for peer_id in _roster.keys():
+		all_peer_ids.append(int(peer_id))
+	all_peer_ids.shuffle()
+
+	# Distribute evenly between red and blue
+	var half := all_peer_ids.size() / 2
+	for i in range(all_peer_ids.size()):
+		var target_team: int
+		if i < half:
+			target_team = GameEnums.TeamId.RED
+		else:
+			target_team = GameEnums.TeamId.BLUE
+		_assign_peer_to_team_authority(all_peer_ids[i], target_team)
 
 
 func _toggle_peer_admin_authority(peer_id: int) -> void:
@@ -596,9 +704,63 @@ func _set_hard_paused(value: bool) -> void:
 		_broadcast_world_state()
 
 
+func _apply_kickoff_constraints() -> void:
+	for player in _get_active_players():
+		if player == null:
+			continue
+		player.set_kickoff_half_locked(true)
+		player.set_kickoff_restricted(player.team_id == _last_scoring_team)
+	_enforce_kickoff_constraints()
+
+
+func _enforce_kickoff_constraints() -> void:
+	if not _kickoff_active or _last_scoring_team == GameEnums.TeamId.NEUTRAL:
+		return
+	var center_radius := 120.0
+	var margin := 2.0
+	for player in _get_active_players():
+		if player == null:
+			continue
+
+		var in_circle := player.position.length() < center_radius
+
+		# Scoring team cannot enter center circle
+		if player.team_id == _last_scoring_team and in_circle:
+			var dist := player.position.length()
+			if dist < 0.001:
+				var push_dir := Vector2.LEFT if player.team_id == GameEnums.TeamId.RED else Vector2.RIGHT
+				player.position = push_dir * center_radius
+			else:
+				player.position = player.position.normalized() * center_radius
+			player.velocity = Vector2.ZERO
+			in_circle = false
+
+		# All players stay on own half, but non-scoring team can cross within center circle
+		if not in_circle:
+			if player.team_id == GameEnums.TeamId.RED and player.position.x > -margin:
+				player.position.x = -margin
+				if player.velocity.x > 0.0:
+					player.velocity.x = 0.0
+			elif player.team_id == GameEnums.TeamId.BLUE and player.position.x < margin:
+				player.position.x = margin
+				if player.velocity.x < 0.0:
+					player.velocity.x = 0.0
+
+
+func _end_kickoff() -> void:
+	_kickoff_active = false
+	for player in _get_active_players():
+		if player != null:
+			player.set_kickoff_restricted(false)
+			player.set_kickoff_half_locked(false)
+	_set_state(GameEnums.MatchState.PLAYING)
+	_broadcast_world_state()
+
+
 func _register_goal(scoring_team: int) -> void:
 	if _match_over:
 		return
+	_last_scoring_team = scoring_team as GameEnums.TeamId
 	if scoring_team == GameEnums.TeamId.RED:
 		red_score += 1
 	else:
@@ -730,7 +892,9 @@ func _broadcast_world_state() -> void:
 		"ms": state_machine.current_state,
 		"hp": _hard_paused,
 		"match_over": _match_over,
-		"goal_reset": _goal_reset_remaining
+		"goal_reset": _goal_reset_remaining,
+		"kickoff": _kickoff_active,
+		"kick_team": _last_scoring_team
 	}
 
 	if NetworkManager.is_online:
@@ -745,6 +909,8 @@ func _apply_world_state_snapshot(snapshot: Dictionary) -> void:
 	blue_score = int(snapshot.get("bs", blue_score))
 	_match_over = bool(snapshot.get("match_over", false))
 	_goal_reset_remaining = float(snapshot.get("goal_reset", -1.0))
+	_kickoff_active = bool(snapshot.get("kickoff", false))
+	_last_scoring_team = int(snapshot.get("kick_team", GameEnums.TeamId.NEUTRAL)) as GameEnums.TeamId
 	var hard_paused := bool(snapshot.get("hp", false))
 	if hard_paused != _hard_paused:
 		_hard_paused = hard_paused
@@ -785,6 +951,18 @@ func _apply_world_state_snapshot(snapshot: Dictionary) -> void:
 		ball.apply_net_state(ball_state)
 
 	_configure_goals(not _match_over and not _hard_paused and _goal_reset_remaining < 0.0)
+
+	# Apply kickoff restrictions on client
+	if _kickoff_active and _last_scoring_team != GameEnums.TeamId.NEUTRAL:
+		for player in _get_active_players():
+			if player != null:
+				player.set_kickoff_half_locked(true)
+				player.set_kickoff_restricted(player.team_id == _last_scoring_team)
+	else:
+		for player in _get_active_players():
+			if player != null:
+				player.set_kickoff_half_locked(false)
+				player.set_kickoff_restricted(false)
 
 
 func _reconcile_remote_players(players: Variant) -> void:
@@ -918,10 +1096,19 @@ func _on_network_peer_connected(peer_id: int) -> void:
 	if _roster.has(peer_id):
 		return
 	_roster[peer_id] = _make_roster_entry(peer_id, "Player %d" % peer_id, GameEnums.TeamId.NEUTRAL, false, false)
+	player_joined.emit("Player %d" % peer_id)
 	_broadcast_room_state()
 
 
 func _on_network_peer_disconnected(peer_id: int) -> void:
+	var leaving_name := "Player"
+	if _roster.has(peer_id):
+		leaving_name = str(_roster[peer_id].get("name", "Player"))
+	player_left.emit(leaving_name)
+	if _is_authority():
+		for pid in NetworkManager.get_connected_peer_ids():
+			if pid != peer_id:
+				_rpc_notify_player_left.rpc_id(pid, leaving_name)
 	_remove_field_player(peer_id)
 	if _roster.has(peer_id):
 		_roster.erase(peer_id)

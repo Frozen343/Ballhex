@@ -10,7 +10,7 @@ signal kick_attempted(player: HexPlayer)
 @export var acceleration := 650.0
 @export var deceleration := 420.0
 @export var facing_turn_speed := 12.0
-@export var kick_strength := 520.0
+@export var kick_strength := 380.0
 @export var kick_contact_margin := 6.0
 @export var body_push_strength := 60.0
 @export var body_radius := GameSettings.PLAYER_RADIUS
@@ -35,6 +35,8 @@ var _field_active := true
 # Network
 var _remote_input_direction := Vector2.ZERO
 var _remote_kick_requested := false
+var _kickoff_restricted := false
+var _kickoff_half_locked := false
 
 # Client interpolation
 var _net_target_position := Vector2.ZERO
@@ -96,7 +98,7 @@ func _physics_process(delta: float) -> void:
 			facing_direction = Vector2.from_angle(new_angle)
 		var kick_pressed := false
 		if _is_local_player():
-			kick_pressed = Input.is_action_just_pressed(_get_local_profile()["kick"])
+			kick_pressed = not GameSettings.chat_active and Input.is_action_just_pressed(_get_local_profile()["kick"])
 		else:
 			kick_pressed = _remote_kick_requested
 			_remote_kick_requested = false
@@ -114,12 +116,14 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		_resolve_player_overlaps()
 		_constrain_to_pitch()
+		_constrain_to_kickoff_zone()
 	else:
 		velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
 		if velocity.length_squared() > 0.001:
 			move_and_slide()
 			_resolve_player_overlaps()
 			_constrain_to_pitch()
+			_constrain_to_kickoff_zone()
 
 	if previous_facing != facing_direction or absf(previous_flash - _kick_flash_strength) > 0.001:
 		needs_redraw = true
@@ -195,6 +199,8 @@ func _get_effective_input() -> Vector2:
 
 
 func _get_local_input() -> Vector2:
+	if GameSettings.chat_active:
+		return Vector2.ZERO
 	var profile := _get_local_profile()
 	var direction := Vector2(
 		Input.get_action_strength(profile["right"]) - Input.get_action_strength(profile["left"]),
@@ -210,7 +216,7 @@ func _send_local_input_to_host() -> void:
 		return
 	var dir := _get_local_input()
 	var profile := _get_local_profile()
-	var kick := Input.is_action_just_pressed(profile["kick"])
+	var kick := not GameSettings.chat_active and Input.is_action_just_pressed(profile["kick"])
 	_rpc_send_input.rpc_id(1, dir.x, dir.y, kick)
 
 
@@ -391,6 +397,45 @@ func _resolve_player_overlaps() -> void:
 			var transfer_other := absf(other_along) * other.player_push_transfer
 			other.velocity -= normal * (-transfer_other * 0.5)
 			velocity -= normal * transfer_other * 0.5
+
+
+func set_kickoff_restricted(value: bool) -> void:
+	_kickoff_restricted = value
+
+
+func set_kickoff_half_locked(value: bool) -> void:
+	_kickoff_half_locked = value
+
+
+func _constrain_to_kickoff_zone() -> void:
+	var center_radius := 120.0
+	var in_circle := position.length() < center_radius
+
+	# Scoring team cannot enter center circle
+	if _kickoff_restricted and in_circle:
+		var dist := position.length()
+		if dist < 0.001:
+			var push_dir := Vector2.LEFT if team_id == GameEnums.TeamId.RED else Vector2.RIGHT
+			position = push_dir * center_radius
+		else:
+			position = position.normalized() * center_radius
+		var to_center := -position.normalized()
+		var vel_toward := velocity.dot(to_center)
+		if vel_toward > 0.0:
+			velocity -= to_center * vel_toward
+		in_circle = false
+
+	# Both teams stay on own half, but non-scoring team can cross within center circle
+	if _kickoff_half_locked and not in_circle:
+		var margin := 2.0
+		if team_id == GameEnums.TeamId.RED and position.x > -margin:
+			position.x = -margin
+			if velocity.x > 0.0:
+				velocity.x = 0.0
+		elif team_id == GameEnums.TeamId.BLUE and position.x < margin:
+			position.x = margin
+			if velocity.x < 0.0:
+				velocity.x = 0.0
 
 
 func _constrain_to_pitch() -> void:

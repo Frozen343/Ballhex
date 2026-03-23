@@ -10,6 +10,8 @@ signal assign_spectator_requested(peer_id: int)
 signal kick_requested(peer_id: int)
 signal ban_requested(peer_id: int)
 signal toggle_admin_requested(peer_id: int)
+signal chat_submitted(message: String)
+signal randomize_teams_requested
 
 const ACTION_KICK := 1
 const ACTION_BAN := 2
@@ -38,6 +40,7 @@ var _selected_peer_id := -1
 var _can_manage := false
 var _match_over := false
 var _local_peer_id := 1
+var _randomize_button: Button
 
 
 func _ready() -> void:
@@ -51,6 +54,8 @@ func _ready() -> void:
 	spectators_list.item_clicked.connect(_on_item_clicked.bind("spectators", spectators_list))
 	blue_list.item_clicked.connect(_on_item_clicked.bind("blue", blue_list))
 	context_menu.id_pressed.connect(_on_context_menu_pressed)
+	_setup_drag_drop()
+	_setup_randomize_button()
 	hide_panel()
 
 
@@ -92,7 +97,8 @@ func _refresh_result_label(snapshot: Dictionary) -> void:
 	else:
 		status_label.text = "Score: Red %d - %d Blue" % [red_score, blue_score]
 		resume_button.text = "Resume"
-	helper_label.text = "Left click: select player   Right click: admin actions" if _can_manage else "ESC ile odayi acip kapatabilirsin."
+	var manage_hint := "Drag players between columns or use buttons below" if _can_manage else "ESC ile odayi acip kapatabilirsin."
+	helper_label.text = manage_hint
 	restart_button.visible = _can_manage
 	restart_button.disabled = not _can_manage
 
@@ -105,6 +111,9 @@ func _refresh_button_state() -> void:
 	send_red_button.disabled = not (_can_manage and has_selection)
 	send_spectators_button.disabled = not (_can_manage and has_selection)
 	send_blue_button.disabled = not (_can_manage and has_selection)
+	if _randomize_button != null:
+		_randomize_button.visible = _can_manage
+		_randomize_button.disabled = not _can_manage
 
 
 func _rebuild_list(list_control: ItemList, entries: Array) -> void:
@@ -209,3 +218,84 @@ func _on_send_spectators_pressed() -> void:
 func _on_send_blue_pressed() -> void:
 	if _selected_peer_id >= 0:
 		assign_blue_requested.emit(_selected_peer_id)
+
+
+# --- Drag and Drop ---
+
+func _setup_drag_drop() -> void:
+	red_list.set_drag_forwarding(_list_get_drag_data.bind("red"), _list_can_drop_data.bind("red"), _list_drop_data.bind("red"))
+	spectators_list.set_drag_forwarding(_list_get_drag_data.bind("spectators"), _list_can_drop_data.bind("spectators"), _list_drop_data.bind("spectators"))
+	blue_list.set_drag_forwarding(_list_get_drag_data.bind("blue"), _list_can_drop_data.bind("blue"), _list_drop_data.bind("blue"))
+
+
+func _list_get_drag_data(at_position: Vector2, source_column: String) -> Variant:
+	if not _can_manage:
+		return null
+	var list_control := _get_list_for_column(source_column)
+	var index := list_control.get_item_at_position(at_position, true)
+	if index < 0:
+		return null
+	var entries: Array = _entries_by_column.get(source_column, [])
+	if index >= entries.size():
+		return null
+	var entry: Dictionary = entries[index]
+	var peer_id := int(entry.get("peer_id", -1))
+	if peer_id < 0:
+		return null
+
+	# Create drag preview
+	var preview := Label.new()
+	preview.text = _format_entry(entry)
+	preview.add_theme_font_size_override("font_size", 18)
+	preview.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.95))
+	var preview_panel := PanelContainer.new()
+	preview_panel.add_child(preview)
+	set_drag_preview(preview_panel)
+
+	return {"peer_id": peer_id, "source_column": source_column, "name": str(entry.get("name", "Player"))}
+
+
+func _list_can_drop_data(_at_position: Vector2, data: Variant, target_column: String) -> bool:
+	if not _can_manage:
+		return false
+	if typeof(data) != TYPE_DICTIONARY:
+		return false
+	var source_column: String = data.get("source_column", "")
+	return source_column != target_column
+
+
+func _list_drop_data(_at_position: Vector2, data: Variant, target_column: String) -> void:
+	if typeof(data) != TYPE_DICTIONARY:
+		return
+	var peer_id := int(data.get("peer_id", -1))
+	if peer_id < 0:
+		return
+	match target_column:
+		"red":
+			assign_red_requested.emit(peer_id)
+		"blue":
+			assign_blue_requested.emit(peer_id)
+		"spectators":
+			assign_spectator_requested.emit(peer_id)
+
+
+func _get_list_for_column(column: String) -> ItemList:
+	match column:
+		"red":
+			return red_list
+		"blue":
+			return blue_list
+		_:
+			return spectators_list
+
+
+# --- Randomize Teams ---
+
+func _setup_randomize_button() -> void:
+	var bottom_node := $Backdrop/Card/Margin/Layout/Bottom
+	_randomize_button = Button.new()
+	_randomize_button.text = "Random Teams"
+	_randomize_button.custom_minimum_size = Vector2(0, 32)
+	_randomize_button.visible = false
+	_randomize_button.pressed.connect(func() -> void: randomize_teams_requested.emit())
+	bottom_node.add_child(_randomize_button)
