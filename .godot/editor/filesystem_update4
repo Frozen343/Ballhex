@@ -1,0 +1,3 @@
+res://Scenes/Entities/Ball/Ball.gd
+res://Scenes/Entities/Player/Player.gd
+res://Scenes/Systems/MatchManager/MatchManager.gd

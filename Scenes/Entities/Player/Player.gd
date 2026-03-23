@@ -72,9 +72,10 @@ func _physics_process(delta: float) -> void:
 			var lerp_factor := clampf(NET_INTERP_SPEED * delta, 0.0, 1.0)
 			position = position.lerp(_net_target_position + _net_target_velocity * delta, lerp_factor)
 			velocity = velocity.lerp(_net_target_velocity, lerp_factor)
+			var facing_lerp := clampf(10.0 * delta, 0.0, 1.0)
 			var current_angle := facing_direction.angle()
 			var target_angle := _net_target_facing.angle()
-			facing_direction = Vector2.from_angle(lerp_angle(current_angle, target_angle, lerp_factor))
+			facing_direction = Vector2.from_angle(lerp_angle(current_angle, target_angle, facing_lerp))
 			# Advance target by velocity to predict between syncs
 			_net_target_position += _net_target_velocity * delta
 		queue_redraw()

@@ -83,7 +83,7 @@ func start_new_match() -> void:
 		force_full_reset()
 		time_system.start()
 	else:
-		time_system.stop()
+		time_system.start()
 		_submit_local_name_deferred.call_deferred()
 	_broadcast_room_state()
 
@@ -487,6 +487,8 @@ func _remove_field_player(peer_id: int) -> void:
 	var player := _field_players.get(peer_id) as HexPlayer
 	if player == null:
 		return
+	if player.is_inside_tree():
+		player.get_parent().remove_child(player)
 	player.queue_free()
 	_field_players.erase(peer_id)
 
@@ -495,6 +497,8 @@ func _remove_all_field_players() -> void:
 	for peer_id in _field_players.keys():
 		var player := _field_players[peer_id] as HexPlayer
 		if player != null:
+			if player.is_inside_tree():
+				player.get_parent().remove_child(player)
 			player.queue_free()
 	_field_players.clear()
 	_refresh_ball_player_tracking()
@@ -734,6 +738,9 @@ func _broadcast_world_state() -> void:
 
 
 func _apply_world_state_snapshot(snapshot: Dictionary) -> void:
+	var prev_red := red_score
+	var prev_blue := blue_score
+	var prev_match_over := _match_over
 	red_score = int(snapshot.get("rs", red_score))
 	blue_score = int(snapshot.get("bs", blue_score))
 	_match_over = bool(snapshot.get("match_over", false))
@@ -743,8 +750,26 @@ func _apply_world_state_snapshot(snapshot: Dictionary) -> void:
 		_hard_paused = hard_paused
 		hard_pause_changed.emit(_hard_paused)
 	score_changed.emit(red_score, blue_score)
-	timer_changed.emit(float(snapshot.get("timer", time_system.remaining_seconds)))
+	var server_timer := float(snapshot.get("timer", time_system.remaining_seconds))
+	time_system.remaining_seconds = server_timer
+	time_system.running = not _match_over and not _hard_paused
 	_set_state(int(snapshot.get("ms", state_machine.current_state)) as GameEnums.MatchState)
+
+	# Client-side goal announcement
+	if red_score > prev_red:
+		announcement_requested.emit("%s scored" % Helpers.team_name(GameEnums.TeamId.RED), Helpers.team_color(GameEnums.TeamId.RED), 1.0)
+	elif blue_score > prev_blue:
+		announcement_requested.emit("%s scored" % Helpers.team_name(GameEnums.TeamId.BLUE), Helpers.team_color(GameEnums.TeamId.BLUE), 1.0)
+
+	# Client-side match end handling
+	if _match_over and not prev_match_over:
+		_result_title = Helpers.winner_text(red_score, blue_score)
+		_result_detail = "Red %d - %d Blue" % [red_score, blue_score]
+		match_finished.emit(_result_title, _result_detail)
+		announcement_requested.emit("Sure bitti", Color(1.0, 0.95, 0.72, 1.0), 1.0)
+		if not is_paused:
+			is_paused = true
+			pause_changed.emit(true)
 
 	var players: Array = []
 	var raw_players: Variant = snapshot.get("players", [])
@@ -857,8 +882,6 @@ func _on_state_changed(_previous_state: int, _new_state: int) -> void:
 
 
 func _on_time_changed(remaining_seconds: float) -> void:
-	if not _is_authority():
-		return
 	timer_changed.emit(remaining_seconds)
 
 
