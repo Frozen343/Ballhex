@@ -3,10 +3,10 @@ class_name MatchStateMachine
 
 signal state_changed(previous_state: int, new_state: int)
 
-var current_state := GameEnums.MatchState.BOOT
+var current_state: GameEnums.MatchState = GameEnums.MatchState.BOOT
 
 
-func transition_to(new_state: int) -> void:
+func transition_to(new_state: GameEnums.MatchState) -> void:
 	if current_state == new_state:
 		return
 	var previous_state := current_state

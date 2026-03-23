@@ -6,11 +6,11 @@ signal kick_attempted(player: HexPlayer)
 @export var player_id := 1
 @export var team_id := GameEnums.TeamId.RED
 @export var display_name := "P1"
-@export var move_speed := 156.0
-@export var acceleration := 580.0
-@export var deceleration := 340.0
+@export var move_speed := 195.0
+@export var acceleration := 650.0
+@export var deceleration := 420.0
 @export var facing_turn_speed := 12.0
-@export var kick_strength := 420.0
+@export var kick_strength := 520.0
 @export var kick_contact_margin := 6.0
 @export var body_push_strength := 60.0
 @export var body_radius := GameSettings.PLAYER_RADIUS
@@ -71,7 +71,16 @@ func _physics_process(delta: float) -> void:
 	if input_enabled:
 		var input_direction := _get_effective_input()
 		if input_direction.length_squared() > 0.0:
-			_update_facing_direction(input_direction, delta)
+			facing_direction = input_direction.normalized()
+		var kick_pressed := false
+		if _is_local_player():
+			kick_pressed = Input.is_action_just_pressed(_get_local_profile()["kick"])
+		else:
+			kick_pressed = _remote_kick_requested
+			_remote_kick_requested = false
+		if kick_pressed:
+			_trigger_kick_flash()
+			_attempt_kick(input_direction)
 		velocity = VelocityMotor2D.update_velocity(
 			velocity,
 			input_direction,
@@ -83,15 +92,6 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		_resolve_player_overlaps()
 		_constrain_to_pitch()
-		var kick_pressed := false
-		if _is_local_player():
-			kick_pressed = Input.is_action_just_pressed(_get_local_profile()["kick"])
-		else:
-			kick_pressed = _remote_kick_requested
-			_remote_kick_requested = false
-		if kick_pressed:
-			_trigger_kick_flash()
-			_attempt_kick(input_direction)
 	else:
 		velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
 		if velocity.length_squared() > 0.001:
@@ -225,14 +225,6 @@ func apply_net_state(state: Dictionary) -> void:
 	controller_peer_id = int(state.get("owner", controller_peer_id))
 	set_display_name(str(state.get("name", display_name)))
 	queue_redraw()
-
-
-func _update_facing_direction(input_direction: Vector2, delta: float) -> void:
-	var target_direction := input_direction.normalized()
-	var current_angle := facing_direction.angle()
-	var target_angle := target_direction.angle()
-	var blend := clampf(delta * facing_turn_speed, 0.0, 1.0)
-	facing_direction = Vector2.RIGHT.rotated(lerp_angle(current_angle, target_angle, blend))
 
 
 func _attempt_kick(input_direction: Vector2) -> void:

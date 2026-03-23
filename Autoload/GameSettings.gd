@@ -11,6 +11,8 @@ const MATCH_DURATION_SECONDS := 120.0
 const GOAL_PAUSE_DURATION := 2.0
 const KICKOFF_COUNTDOWN := 3
 const COUNTDOWN_STEP_DURATION := 0.75
+const SETTINGS_FILE_PATH := "user://settings.cfg"
+const DEFAULT_PLAYER_NAME := "Player"
 
 const COLOR_FIELD_OUTER := Color("788f5d")
 const COLOR_FIELD_DARK := Color("97bd85")
@@ -39,6 +41,7 @@ const INPUT_BINDINGS := {
 	"p2_kick": [KEY_PERIOD],
 	"p2_dash": [KEY_SLASH],
 	"pause": [KEY_ESCAPE],
+	"hard_pause": [KEY_P],
 	"accept": [KEY_ENTER],
 	"cancel": [KEY_BACKSPACE],
 	"debug_toggle": [KEY_F3],
@@ -49,10 +52,45 @@ const INPUT_BINDINGS := {
 }
 
 var debug_overlay_enabled := true
+var player_name := ""
 
 
 func _ready() -> void:
+	_load_settings()
 	_register_default_input_map()
+
+
+func has_player_name() -> bool:
+	return not player_name.strip_edges().is_empty()
+
+
+func set_player_name(value: String) -> void:
+	player_name = sanitize_player_name(value)
+	_save_settings()
+
+
+func sanitize_player_name(value: String) -> String:
+	var cleaned := value.strip_edges()
+	if cleaned.is_empty():
+		cleaned = DEFAULT_PLAYER_NAME
+	if cleaned.length() > 18:
+		cleaned = cleaned.substr(0, 18)
+	return cleaned
+
+
+func _load_settings() -> void:
+	var config := ConfigFile.new()
+	var error := config.load(SETTINGS_FILE_PATH)
+	if error != OK:
+		player_name = ""
+		return
+	player_name = sanitize_player_name(str(config.get_value("profile", "player_name", "")))
+
+
+func _save_settings() -> void:
+	var config := ConfigFile.new()
+	config.set_value("profile", "player_name", player_name)
+	config.save(SETTINGS_FILE_PATH)
 
 
 func _register_default_input_map() -> void:

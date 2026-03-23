@@ -4,7 +4,7 @@ class_name Helpers
 
 static func format_match_time(seconds: float) -> String:
 	var clamped_seconds := maxi(0, int(ceil(seconds)))
-	var minutes := clamped_seconds / 60
+	var minutes := int(floor(float(clamped_seconds) / 60.0))
 	var remaining_seconds := clamped_seconds % 60
 	return "%02d:%02d" % [minutes, remaining_seconds]
 

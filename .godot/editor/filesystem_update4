@@ -9,3 +9,13 @@ res://Scenes/Systems/MatchManager/MatchManager.gd
 res://Scenes/Entities/Ball/Ball.gd
 res://Scenes/UI/Hud/MatchHUD.gd
 res://Scenes/UI/Hud/MatchHUD.tscn
+res://Autoload/SceneRouter.gd
+res://Scenes/App/App.gd
+res://Scenes/Menus/EndMatchPanel.gd
+res://Scenes/Menus/EndMatchPanel.tscn
+res://Scenes/Menus/PauseMenu.gd
+res://Scenes/Menus/PauseMenu.tscn
+res://Scenes/Entities/Goal/Goal.gd
+res://Scenes/Systems/StateMachine/MatchStateMachine.gd
+res://Scripts/Core/Helpers.gd
+res://Scenes/App/App.tscn

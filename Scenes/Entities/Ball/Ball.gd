@@ -2,7 +2,7 @@ extends CharacterBody2D
 class_name MatchBall
 
 @export var radius := GameSettings.BALL_RADIUS
-@export var max_speed := 550.0
+@export var max_speed := 750.0
 @export var drag := 105.0
 @export var wall_bounce := 0.64
 @export var player_hit_multiplier := 0.22
@@ -58,9 +58,9 @@ func set_ball_motion_enabled(value: bool) -> void:
 		velocity = Vector2.ZERO
 
 
-func reset_ball(position: Vector2 = Vector2.ZERO) -> void:
-	self.position = position
-	spawn_position = position
+func reset_ball(reset_position: Vector2 = Vector2.ZERO) -> void:
+	self.position = reset_position
+	spawn_position = reset_position
 	velocity = Vector2.ZERO
 	last_touch_player_id = -1
 	last_touch_team_id = GameEnums.TeamId.NEUTRAL
@@ -87,7 +87,11 @@ func _move_with_bounce(delta: float) -> void:
 		if collider is HexPlayer:
 			var player := collider as HexPlayer
 			_handle_player_collision(collision, player)
-			remaining_motion = collision.get_remainder().slide(collision.get_normal()) * 0.18
+			var normal := collision.get_normal()
+			if velocity.dot(normal) > 10.0:
+				remaining_motion = velocity.normalized() * collision.get_remainder().length()
+			else:
+				remaining_motion = collision.get_remainder().slide(normal) * 0.18
 			prev_bounce_normal = Vector2.ZERO
 		else:
 			var bounce_normal := collision.get_normal()
@@ -158,7 +162,10 @@ func _handle_player_collision(collision: KinematicCollision2D, player: HexPlayer
 	var tangent_velocity := player.velocity - normal * player.velocity.dot(normal)
 	var contact_push := clampf(min_contact_push + forward_speed * player_hit_multiplier, min_contact_push, max_contact_push)
 	position += normal * 0.75
-	velocity = velocity.slide(normal) * 0.9 + normal * contact_push
+	
+	var outward_speed := velocity.dot(normal)
+	velocity = velocity.slide(normal) * 0.9 + normal * maxf(contact_push, outward_speed)
+	
 	velocity += tangent_velocity * tangent_carry_factor
 	velocity = velocity.limit_length(max_speed)
 	player.apply_ball_recoil(-normal * minf(contact_push, player_recoil_strength))

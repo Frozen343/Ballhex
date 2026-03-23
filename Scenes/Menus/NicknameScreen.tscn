@@ -1,0 +1,78 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scenes/Menus/NicknameScreen.gd" id="1"]
+
+[node name="NicknameScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.12, 0.14, 0.12, 1)
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Card" type="Panel" parent="Center"]
+custom_minimum_size = Vector2(460, 300)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="Center/Card"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 28
+theme_override_constants/margin_top = 28
+theme_override_constants/margin_right = 28
+theme_override_constants/margin_bottom = 28
+
+[node name="VBox" type="VBoxContainer" parent="Center/Card/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Title" type="Label" parent="Center/Card/Margin/VBox"]
+layout_mode = 2
+text = "Choose Your Nickname"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 34
+
+[node name="Subtitle" type="Label" parent="Center/Card/Margin/VBox"]
+layout_mode = 2
+text = "This name will be shown in rooms and on the field."
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 18
+
+[node name="NameInput" type="LineEdit" parent="Center/Card/Margin/VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 46)
+placeholder_text = "Nickname"
+theme_override_font_sizes/font_size = 22
+
+[node name="Hint" type="Label" parent="Center/Card/Margin/VBox"]
+layout_mode = 2
+text = "Press Next to continue"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 16
+
+[node name="NextButton" type="Button" parent="Center/Card/Margin/VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 52)
+text = "Next"

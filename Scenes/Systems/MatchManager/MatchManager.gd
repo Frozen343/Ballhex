@@ -5,497 +5,902 @@ signal score_changed(red_score: int, blue_score: int)
 signal timer_changed(remaining_seconds: float)
 signal announcement_requested(text: String, color: Color, duration: float)
 signal pause_changed(is_paused: bool)
+signal hard_pause_changed(is_hard_paused: bool)
 signal match_finished(title: String, detail: String)
 signal state_updated(state_name: String)
-signal lobby_state_changed(roster: Array, local_slot: String, can_assign: bool, capacity: int)
+signal room_state_changed(snapshot: Dictionary)
 
-const SLOT_WAITING := "waiting"
-const SLOT_RED := "red"
-const SLOT_BLUE := "blue"
+const PLAYER_SCENE := preload("res://Scenes/Entities/Player/Player.tscn")
+const WORLD_SYNC_INTERVAL := 0.05
+const DEFAULT_GOAL_RESET_DELAY := 1.6
+const LOCAL_ROOM_NAME := "Local Match"
 
-@export var match_duration_seconds := GameSettings.MATCH_DURATION_SECONDS
-@export var goal_pause_duration := GameSettings.GOAL_PAUSE_DURATION
-
+@onready var entities_root: Node2D = $"../../World/Entities"
+@onready var ball: MatchBall = $"../../World/Entities/Ball"
+@onready var goals_root: Node2D = $"../../World/Goals"
 @onready var state_machine: MatchStateMachine = $"../StateMachine"
 @onready var reset_system: ResetSystem = $"../ResetSystem"
 @onready var time_system: MatchTimeSystem = $"../TimeSystem"
-@onready var ball: MatchBall = $"../../World/Entities/Ball"
-@onready var player_red: HexPlayer = $"../../World/Entities/PlayerRed"
-@onready var player_blue: HexPlayer = $"../../World/Entities/PlayerBlue"
-@onready var left_goal: GoalZone = $"../../World/Goals/LeftGoal"
-@onready var right_goal: GoalZone = $"../../World/Goals/RightGoal"
 
 var red_score := 0
 var blue_score := 0
-var _players: Array[HexPlayer] = []
-var _flow_version := 0
-var _lobby_roster: Dictionary = {}
-var _slot_assignments := {
-	SLOT_RED: 1,
-	SLOT_BLUE: -1
-}
-var _red_spawn_position := Vector2.ZERO
-var _blue_spawn_position := Vector2.ZERO
+var is_paused := false
+
+var _match_over := false
+var _result_title := ""
+var _result_detail := ""
+var _field_players: Dictionary = {}
+var _roster: Dictionary = {}
+var _banned_names: Dictionary = {}
+var _goal_reset_remaining := -1.0
+var _sync_accumulator := 0.0
+var _state_before_pause := GameEnums.MatchState.PLAYING
+var _hard_paused := false
 
 
 func _ready() -> void:
-	_players = [player_red, player_blue]
-	_red_spawn_position = player_red.position
-	_blue_spawn_position = player_blue.position
+	_clear_legacy_players()
+	_connect_core_signals()
+	_emit_state_name()
 
-	for player in _players:
-		player.assign_ball(ball)
-	ball.register_players(_players)
 
-	left_goal.goal_scored.connect(_on_goal_scored)
-	right_goal.goal_scored.connect(_on_goal_scored)
-	time_system.time_changed.connect(_on_time_changed)
-	time_system.time_expired.connect(_on_time_expired)
-	state_machine.state_changed.connect(_on_state_changed)
+func _process(delta: float) -> void:
+	if not _hard_paused and _goal_reset_remaining >= 0.0:
+		_goal_reset_remaining -= delta
+		if _goal_reset_remaining <= 0.0:
+			_goal_reset_remaining = -1.0
+			if _is_authority():
+				force_full_reset()
 
-	if NetworkManager.is_online:
-		NetworkManager.peer_connected.connect(_on_peer_joined_network)
-		NetworkManager.peer_disconnected.connect(_on_peer_left_network)
-		if NetworkManager.is_host():
-			_initialize_host_lobby()
-		else:
-			player_red.set_field_active(false)
-			player_blue.set_field_active(false)
-			_emit_lobby_state_changed()
-			_rpc_request_lobby_state.rpc_id(1)
-	else:
-		player_red.set_controller_peer_id(1)
-		player_blue.set_controller_peer_id(2)
-		player_red.set_field_active(true)
-		player_blue.set_field_active(true)
+	if NetworkManager.is_online and _is_authority():
+		_sync_accumulator += delta
+		if _sync_accumulator >= WORLD_SYNC_INTERVAL:
+			_sync_accumulator = 0.0
+			_broadcast_world_state()
 
 
 func start_new_match() -> void:
-	_flow_version += 1
+	_match_over = false
+	_result_title = ""
+	_result_detail = ""
+	_goal_reset_remaining = -1.0
+	_sync_accumulator = 0.0
 	red_score = 0
 	blue_score = 0
-	score_changed.emit(red_score, blue_score)
-	time_system.setup(match_duration_seconds)
-	reset_system.reset_world(_players, ball)
+	is_paused = false
+	_hard_paused = false
+	_set_state(GameEnums.MatchState.PLAYING)
 	match_finished.emit("", "")
-	_start_playing()
-	_apply_online_slot_state()
+	pause_changed.emit(false)
+	hard_pause_changed.emit(false)
+	score_changed.emit(red_score, blue_score)
+	time_system.setup(GameSettings.MATCH_DURATION_SECONDS)
+	timer_changed.emit(time_system.remaining_seconds)
+	_rebuild_roster_for_current_mode()
+	_configure_goals(true)
+	_apply_simulation_state()
+	if _is_authority():
+		force_full_reset()
+		time_system.start()
+	else:
+		time_system.stop()
+		_submit_local_name_deferred.call_deferred()
+	_broadcast_room_state()
 
 
 func restart_match() -> void:
+	if NetworkManager.is_online and not _is_authority():
+		_rpc_request_restart_match.rpc_id(1)
+		return
 	start_new_match()
 
 
+func toggle_hard_pause() -> void:
+	if NetworkManager.is_online and not _is_authority():
+		_rpc_request_toggle_hard_pause.rpc_id(1)
+		return
+	_set_hard_paused(not _hard_paused)
+
+
 func toggle_pause() -> void:
-	if state_machine.is_in_state(GameEnums.MatchState.PLAYING):
-		_pause_match()
-	elif state_machine.is_in_state(GameEnums.MatchState.PAUSED):
-		_resume_match()
-
-
-func add_debug_score(team_id: int) -> void:
-	if team_id == GameEnums.TeamId.RED:
-		red_score += 1
+	is_paused = not is_paused
+	if is_paused:
+		_state_before_pause = state_machine.current_state
+		_set_state(GameEnums.MatchState.PAUSED)
 	else:
-		blue_score += 1
-	score_changed.emit(red_score, blue_score)
+		if _match_over:
+			_set_state(GameEnums.MatchState.MATCH_ENDED)
+		elif _goal_reset_remaining >= 0.0:
+			_set_state(GameEnums.MatchState.GOAL_SCORED)
+		else:
+			_set_state(_state_before_pause if _state_before_pause != GameEnums.MatchState.PAUSED else GameEnums.MatchState.PLAYING)
+	pause_changed.emit(is_paused)
 
 
 func reset_ball_only() -> void:
+	if not _is_authority():
+		return
 	ball.reset_ball(Vector2.ZERO)
-	if state_machine.is_in_state(GameEnums.MatchState.PLAYING):
-		ball.set_ball_motion_enabled(true)
+	ball.set_ball_motion_enabled(not _match_over)
+	_broadcast_world_state()
 
 
 func force_full_reset() -> void:
-	_flow_version += 1
-	reset_system.reset_world(_players, ball)
-	time_system.setup(match_duration_seconds)
-	_start_playing()
-	_apply_online_slot_state()
+	if not _is_authority():
+		return
+
+	var active_players := _get_active_players()
+	for player in active_players:
+		if player == null:
+			continue
+		player.set_spawn_position(_get_random_spawn_position(player.team_id, player.player_id))
+		player.reset_to_spawn()
+		player.set_input_enabled(not _match_over and not _hard_paused)
+
+	reset_system.reset_world(active_players, ball)
+	ball.set_ball_motion_enabled(not _match_over and not _hard_paused)
+	_configure_goals(not _match_over)
+	if _match_over:
+		_set_state(GameEnums.MatchState.MATCH_ENDED)
+	else:
+		_set_state(GameEnums.MatchState.PLAYING)
+	_broadcast_world_state()
 
 
-func build_debug_snapshot() -> Dictionary:
-	return {
-		"state": state_machine.state_name(),
-		"timer": Helpers.format_match_time(time_system.remaining_seconds),
-		"red_score": red_score,
-		"blue_score": blue_score,
-		"ball_speed": snapped(ball.velocity.length(), 0.1),
-		"ball_velocity": ball.velocity,
-		"last_touch_team": Helpers.team_name(ball.last_touch_team_id),
-		"last_touch_player_id": ball.last_touch_player_id,
-		"p1_velocity": player_red.velocity,
-		"p2_velocity": player_blue.velocity
-	}
+func add_debug_score(team_id: int) -> void:
+	if not _is_authority():
+		return
+	_register_goal(team_id)
 
 
 func assign_peer_to_red(peer_id: int) -> void:
-	_assign_peer_to_slot(peer_id, SLOT_RED)
+	_request_team_assignment(peer_id, GameEnums.TeamId.RED)
 
 
 func assign_peer_to_blue(peer_id: int) -> void:
-	_assign_peer_to_slot(peer_id, SLOT_BLUE)
+	_request_team_assignment(peer_id, GameEnums.TeamId.BLUE)
 
 
 func assign_peer_to_waiting(peer_id: int) -> void:
-	_assign_peer_to_slot(peer_id, SLOT_WAITING)
+	_request_team_assignment(peer_id, GameEnums.TeamId.NEUTRAL)
 
 
-func _start_playing() -> void:
-	state_machine.transition_to(GameEnums.MatchState.PLAYING)
-	_set_world_active(true)
-	_set_goals_enabled(true)
-	time_system.start()
-	GameEvents.emit_match_started()
-
-
-func _pause_match() -> void:
-	state_machine.transition_to(GameEnums.MatchState.PAUSED)
-	time_system.stop()
-	_set_world_active(false)
-	_set_goals_enabled(false)
-	pause_changed.emit(true)
-	GameEvents.emit_pause_toggled(true)
-
-
-func _resume_match() -> void:
-	state_machine.transition_to(GameEnums.MatchState.PLAYING)
-	time_system.start()
-	_set_world_active(true)
-	_set_goals_enabled(true)
-	pause_changed.emit(false)
-	GameEvents.emit_pause_toggled(false)
-	announcement_requested.emit("Resume", Color.WHITE, 0.4)
-
-
-func _initialize_host_lobby() -> void:
-	_lobby_roster = {
-		1: _build_lobby_entry(1, "Host", SLOT_RED, true)
-	}
-	_slot_assignments[SLOT_RED] = 1
-	_slot_assignments[SLOT_BLUE] = -1
-	_apply_online_slot_state()
-
-
-func _on_peer_joined_network(peer_id: int) -> void:
-	if not NetworkManager.is_host():
+func kick_peer(peer_id: int) -> void:
+	if NetworkManager.is_online and not _is_authority():
+		_rpc_request_kick_peer.rpc_id(1, peer_id)
 		return
-	if _lobby_roster.has(peer_id):
+	_kick_peer_authority(peer_id, false)
+
+
+func ban_peer(peer_id: int) -> void:
+	if NetworkManager.is_online and not _is_authority():
+		_rpc_request_ban_peer.rpc_id(1, peer_id)
 		return
-
-	_lobby_roster[peer_id] = _build_lobby_entry(peer_id, "Player %d" % peer_id, SLOT_WAITING, false)
-	announcement_requested.emit("Player %d joined the lobby" % peer_id, Color.WHITE, 1.6)
-	_apply_online_slot_state()
-	_broadcast_lobby_state()
+	_kick_peer_authority(peer_id, true)
 
 
-func _on_peer_left_network(peer_id: int) -> void:
-	if not NetworkManager.is_host():
+func toggle_peer_admin(peer_id: int) -> void:
+	if NetworkManager.is_online and not _is_authority():
+		_rpc_request_toggle_admin.rpc_id(1, peer_id)
 		return
-	if not _lobby_roster.has(peer_id):
-		return
-
-	_remove_peer_from_slots(peer_id)
-	_lobby_roster.erase(peer_id)
-	announcement_requested.emit("Player %d left the lobby" % peer_id, Color.WHITE, 1.6)
-	_apply_online_slot_state()
-	_broadcast_lobby_state()
+	_toggle_peer_admin_authority(peer_id)
 
 
-func _assign_peer_to_slot(peer_id: int, slot: String) -> void:
-	if not NetworkManager.is_online or not NetworkManager.is_host():
-		return
-	if not _lobby_roster.has(peer_id):
-		return
-
-	_remove_peer_from_slots(peer_id)
-
-	if slot == SLOT_RED or slot == SLOT_BLUE:
-		var current_peer := int(_slot_assignments.get(slot, -1))
-		if current_peer >= 0 and _lobby_roster.has(current_peer):
-			var current_entry: Dictionary = _lobby_roster[current_peer]
-			current_entry["slot"] = SLOT_WAITING
-			_lobby_roster[current_peer] = current_entry
-		_slot_assignments[slot] = peer_id
-	else:
-		_slot_assignments[SLOT_RED] = -1 if int(_slot_assignments[SLOT_RED]) == peer_id else int(_slot_assignments[SLOT_RED])
-		_slot_assignments[SLOT_BLUE] = -1 if int(_slot_assignments[SLOT_BLUE]) == peer_id else int(_slot_assignments[SLOT_BLUE])
-
-	var entry: Dictionary = _lobby_roster[peer_id]
-	entry["slot"] = slot
-	_lobby_roster[peer_id] = entry
-
-	_apply_online_slot_state()
-	_broadcast_lobby_state()
-
-
-func _remove_peer_from_slots(peer_id: int) -> void:
-	for slot_name in [SLOT_RED, SLOT_BLUE]:
-		if int(_slot_assignments.get(slot_name, -1)) == peer_id:
-			_slot_assignments[slot_name] = -1
-
-
-func _apply_online_slot_state() -> void:
-	if not NetworkManager.is_online:
-		return
-	_apply_slot_to_player(player_red, _red_spawn_position, SLOT_RED)
-	_apply_slot_to_player(player_blue, _blue_spawn_position, SLOT_BLUE)
-	_sync_world_activity()
-	_emit_lobby_state_changed()
-
-
-func _apply_slot_to_player(player: HexPlayer, spawn_position: Vector2, slot_name: String) -> void:
-	player.set_spawn_position(spawn_position)
-	var previous_owner := player.controller_peer_id
-	var was_active := player.is_field_active()
-	var peer_id := int(_slot_assignments.get(slot_name, -1))
-	if peer_id < 0 or not _lobby_roster.has(peer_id):
-		player.set_controller_peer_id(-1)
-		player.set_display_name("%s Slot" % slot_name.capitalize())
-		player.set_field_active(false)
-		return
-
-	var entry: Dictionary = _lobby_roster[peer_id]
-	player.set_controller_peer_id(peer_id)
-	player.set_display_name(str(entry.get("name", "Player")))
-	player.set_field_active(true)
-	if previous_owner != peer_id or not was_active:
-		player.reset_to_spawn()
-
-
-func _sync_world_activity() -> void:
-	var world_active := state_machine.is_in_state(GameEnums.MatchState.PLAYING) or state_machine.is_in_state(GameEnums.MatchState.GOAL_SCORED)
-	var goals_active := state_machine.is_in_state(GameEnums.MatchState.PLAYING)
-	_set_world_active(world_active)
-	_set_goals_enabled(goals_active)
-	ball.set_ball_motion_enabled(world_active)
-
-
-func _build_lobby_entry(peer_id: int, player_name: String, slot: String, is_host_player: bool) -> Dictionary:
-	return {
-		"peer_id": peer_id,
-		"name": player_name,
-		"slot": slot,
-		"is_host": is_host_player
-	}
-
-
-func _emit_lobby_state_changed() -> void:
-	if not NetworkManager.is_online:
-		lobby_state_changed.emit([], "", false, 0)
-		return
-
-	var roster: Array = []
-	var peer_ids: Array = _lobby_roster.keys()
-	peer_ids.sort()
-	for peer_id in peer_ids:
-		var entry: Dictionary = _lobby_roster[peer_id]
-		roster.append(entry.duplicate(true))
-
-	lobby_state_changed.emit(
-		roster,
-		_get_local_slot(),
-		NetworkManager.is_host(),
-		NetworkManager.get_lobby_capacity()
-	)
-
-
-func _get_local_slot() -> String:
-	var local_id := NetworkManager.get_local_peer_id()
-	for peer_id in _lobby_roster.keys():
-		if int(peer_id) != local_id:
-			continue
-		var entry: Dictionary = _lobby_roster[peer_id]
-		return str(entry.get("slot", SLOT_WAITING))
-	return SLOT_WAITING
-
-
-func _build_lobby_snapshot() -> Dictionary:
-	var roster: Array = []
-	var peer_ids: Array = _lobby_roster.keys()
-	peer_ids.sort()
-	for peer_id in peer_ids:
-		var entry: Dictionary = _lobby_roster[peer_id]
-		roster.append(entry.duplicate(true))
+func build_debug_snapshot() -> Dictionary:
+	var active_players := _get_active_players()
+	var first_velocity := Vector2.ZERO
+	var second_velocity := Vector2.ZERO
+	if active_players.size() > 0 and active_players[0] != null:
+		first_velocity = active_players[0].velocity
+	if active_players.size() > 1 and active_players[1] != null:
+		second_velocity = active_players[1].velocity
 
 	return {
-		"roster": roster,
-		"red_peer_id": int(_slot_assignments.get(SLOT_RED, -1)),
-		"blue_peer_id": int(_slot_assignments.get(SLOT_BLUE, -1)),
-		"capacity": NetworkManager.get_lobby_capacity()
+		"timer": Helpers.format_match_time(time_system.remaining_seconds),
+		"red_score": red_score,
+		"blue_score": blue_score,
+		"ball_speed": snappedf(ball.velocity.length(), 0.01),
+		"ball_velocity": ball.velocity,
+		"last_touch_team": Helpers.team_name(ball.last_touch_team_id),
+		"last_touch_player_id": ball.last_touch_player_id,
+		"p1_velocity": first_velocity,
+		"p2_velocity": second_velocity
 	}
-
-
-func _apply_lobby_snapshot(snapshot: Dictionary) -> void:
-	_lobby_roster.clear()
-	var roster: Array = snapshot.get("roster", [])
-	for entry_variant in roster:
-		if typeof(entry_variant) != TYPE_DICTIONARY:
-			continue
-		var entry: Dictionary = entry_variant
-		_lobby_roster[int(entry.get("peer_id", -1))] = entry.duplicate(true)
-
-	_slot_assignments[SLOT_RED] = int(snapshot.get("red_peer_id", -1))
-	_slot_assignments[SLOT_BLUE] = int(snapshot.get("blue_peer_id", -1))
-	NetworkManager.lobby_max_players = int(snapshot.get("capacity", NetworkManager.lobby_max_players))
-	_apply_online_slot_state()
-
-
-func _broadcast_lobby_state() -> void:
-	if not NetworkManager.is_online or not NetworkManager.is_host():
-		return
-	var snapshot := _build_lobby_snapshot()
-	for peer_id in NetworkManager.get_connected_peer_ids():
-		_rpc_receive_lobby_state.rpc_id(peer_id, snapshot)
 
 
 @rpc("any_peer", "reliable", "call_remote")
-func _rpc_request_lobby_state() -> void:
-	if not NetworkManager.is_host():
+func _rpc_submit_player_name(player_name: String) -> void:
+	if not _is_authority():
 		return
-	var requester_id := multiplayer.get_remote_sender_id()
-	if requester_id <= 0:
+	var sender_peer_id := multiplayer.get_remote_sender_id()
+	var clean_name := GameSettings.sanitize_player_name(player_name)
+	if _is_banned_name(clean_name):
+		_kick_peer_authority(sender_peer_id, true, "Bu odadan banlandin.")
 		return
-	_rpc_receive_lobby_state.rpc_id(requester_id, _build_lobby_snapshot())
+
+	var entry := _get_roster_entry(sender_peer_id)
+	if entry.is_empty():
+		entry = _make_roster_entry(sender_peer_id, clean_name, GameEnums.TeamId.NEUTRAL, false, false)
+	entry["name"] = clean_name
+	_roster[sender_peer_id] = entry
+	_update_field_player_from_roster(sender_peer_id, false)
+	_broadcast_room_state()
+	_broadcast_world_state()
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func _rpc_request_team_assignment(peer_id: int, team_id: int) -> void:
+	if not _is_authority():
+		return
+	var sender_peer_id := multiplayer.get_remote_sender_id()
+	if not _can_manage_roster(sender_peer_id):
+		return
+	_assign_peer_to_team_authority(peer_id, team_id)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func _rpc_request_restart_match() -> void:
+	if not _is_authority():
+		return
+	var sender_peer_id := multiplayer.get_remote_sender_id()
+	if not _can_manage_roster(sender_peer_id):
+		return
+	start_new_match()
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func _rpc_request_toggle_hard_pause() -> void:
+	if not _is_authority():
+		return
+	_set_hard_paused(not _hard_paused)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func _rpc_request_kick_peer(peer_id: int) -> void:
+	if not _is_authority():
+		return
+	var sender_peer_id := multiplayer.get_remote_sender_id()
+	if not _can_manage_roster(sender_peer_id):
+		return
+	_kick_peer_authority(peer_id, false)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func _rpc_request_ban_peer(peer_id: int) -> void:
+	if not _is_authority():
+		return
+	var sender_peer_id := multiplayer.get_remote_sender_id()
+	if not _can_manage_roster(sender_peer_id):
+		return
+	_kick_peer_authority(peer_id, true)
+
+
+@rpc("any_peer", "reliable", "call_remote")
+func _rpc_request_toggle_admin(peer_id: int) -> void:
+	if not _is_authority():
+		return
+	var sender_peer_id := multiplayer.get_remote_sender_id()
+	if not _can_manage_roster(sender_peer_id):
+		return
+	_toggle_peer_admin_authority(peer_id)
 
 
 @rpc("authority", "reliable", "call_remote")
-func _rpc_receive_lobby_state(snapshot: Dictionary) -> void:
-	_apply_lobby_snapshot(snapshot)
+func _rpc_receive_room_state(snapshot: Dictionary) -> void:
+	if _is_authority():
+		return
+	_apply_room_state_snapshot(snapshot)
 
 
-func _on_goal_scored(scoring_team: int, _defending_team: int) -> void:
-	if not state_machine.is_in_state(GameEnums.MatchState.PLAYING):
+@rpc("authority", "unreliable", "call_remote")
+func _rpc_receive_world_state(snapshot: Dictionary) -> void:
+	if _is_authority():
+		return
+	_apply_world_state_snapshot(snapshot)
+
+
+@rpc("authority", "reliable", "call_remote")
+func _rpc_force_leave(reason: String) -> void:
+	announcement_requested.emit(reason, Color(1.0, 0.72, 0.72, 1.0), 1.25)
+	NetworkManager.disconnect_game()
+	SceneRouter.go_to_main_menu()
+
+
+func _connect_core_signals() -> void:
+	if not state_machine.state_changed.is_connected(_on_state_changed):
+		state_machine.state_changed.connect(_on_state_changed)
+	if not time_system.time_changed.is_connected(_on_time_changed):
+		time_system.time_changed.connect(_on_time_changed)
+	if not time_system.time_expired.is_connected(_on_time_expired):
+		time_system.time_expired.connect(_on_time_expired)
+	if not NetworkManager.peer_connected.is_connected(_on_network_peer_connected):
+		NetworkManager.peer_connected.connect(_on_network_peer_connected)
+	if not NetworkManager.peer_disconnected.is_connected(_on_network_peer_disconnected):
+		NetworkManager.peer_disconnected.connect(_on_network_peer_disconnected)
+	if not NetworkManager.server_disconnected.is_connected(_on_network_server_disconnected):
+		NetworkManager.server_disconnected.connect(_on_network_server_disconnected)
+
+	for goal_node in goals_root.get_children():
+		var goal := goal_node as GoalZone
+		if goal != null and not goal.goal_scored.is_connected(_on_goal_scored):
+			goal.goal_scored.connect(_on_goal_scored)
+
+
+func _clear_legacy_players() -> void:
+	for child in entities_root.get_children():
+		if child is HexPlayer:
+			child.queue_free()
+	_field_players.clear()
+	_refresh_ball_player_tracking()
+
+
+func _rebuild_roster_for_current_mode() -> void:
+	_remove_all_field_players()
+	_roster.clear()
+	_banned_names.clear()
+
+	if NetworkManager.is_online:
+		if _is_authority():
+			var local_peer_id := NetworkManager.get_local_peer_id()
+			_roster[local_peer_id] = _make_roster_entry(
+				local_peer_id,
+				GameSettings.player_name,
+				GameEnums.TeamId.RED,
+				true,
+				true
+			)
+			_update_field_player_from_roster(local_peer_id, true)
+
+			for peer_id in NetworkManager.get_connected_peer_ids():
+				if peer_id == local_peer_id:
+					continue
+				_roster[peer_id] = _make_roster_entry(peer_id, "Player %d" % peer_id, GameEnums.TeamId.NEUTRAL, false, false)
+		else:
+			ball.reset_ball(Vector2.ZERO)
+			ball.set_ball_motion_enabled(false)
+	else:
+		_roster[1] = _make_roster_entry(1, GameSettings.player_name, GameEnums.TeamId.RED, true, true)
+		_roster[2] = _make_roster_entry(2, "Blue Player", GameEnums.TeamId.BLUE, false, false)
+		_update_field_player_from_roster(1, true)
+		_update_field_player_from_roster(2, true)
+
+	_refresh_ball_player_tracking()
+
+
+func _make_roster_entry(peer_id: int, player_name: String, team_id: int, is_admin: bool, is_host: bool) -> Dictionary:
+	return {
+		"peer_id": peer_id,
+		"name": GameSettings.sanitize_player_name(player_name),
+		"team_id": team_id,
+		"is_admin": is_admin,
+		"is_host": is_host
+	}
+
+
+func _request_team_assignment(peer_id: int, team_id: int) -> void:
+	if NetworkManager.is_online and not _is_authority():
+		_rpc_request_team_assignment.rpc_id(1, peer_id, team_id)
+		return
+	_assign_peer_to_team_authority(peer_id, team_id)
+
+
+func _assign_peer_to_team_authority(peer_id: int, team_id: int) -> void:
+	if not _roster.has(peer_id):
+		return
+	var clamped_team := team_id
+	if clamped_team != GameEnums.TeamId.RED and clamped_team != GameEnums.TeamId.BLUE:
+		clamped_team = GameEnums.TeamId.NEUTRAL
+
+	var entry := _get_roster_entry(peer_id)
+	var previous_team := int(entry.get("team_id", GameEnums.TeamId.NEUTRAL))
+	if previous_team == clamped_team and (clamped_team == GameEnums.TeamId.NEUTRAL or _field_players.has(peer_id)):
 		return
 
-	state_machine.transition_to(GameEnums.MatchState.GOAL_SCORED)
-	_set_goals_enabled(false)
+	entry["team_id"] = clamped_team
+	_roster[peer_id] = entry
+	_update_field_player_from_roster(peer_id, previous_team != clamped_team)
+	_refresh_ball_player_tracking()
+	_broadcast_room_state()
+	_broadcast_world_state()
 
+
+func _toggle_peer_admin_authority(peer_id: int) -> void:
+	if not _roster.has(peer_id):
+		return
+	var entry := _get_roster_entry(peer_id)
+	if bool(entry.get("is_host", false)):
+		return
+	entry["is_admin"] = not bool(entry.get("is_admin", false))
+	_roster[peer_id] = entry
+	_broadcast_room_state()
+
+
+func _kick_peer_authority(peer_id: int, ban_peer_flag: bool, leave_reason: String = "") -> void:
+	if not _roster.has(peer_id):
+		return
+	var entry := _get_roster_entry(peer_id)
+	if bool(entry.get("is_host", false)):
+		return
+
+	var reason := leave_reason
+	if reason.is_empty():
+		reason = "Odadan atildin."
+		if ban_peer_flag:
+			reason = "Odadan banlandin."
+
+	if ban_peer_flag:
+		_banned_names[_normalize_name(str(entry.get("name", "")))] = true
+
+	_remove_field_player(peer_id)
+	_roster.erase(peer_id)
+	_refresh_ball_player_tracking()
+	_broadcast_room_state()
+	_broadcast_world_state()
+
+	if NetworkManager.is_online:
+		_rpc_force_leave.rpc_id(peer_id, reason)
+
+
+func _update_field_player_from_roster(peer_id: int, reposition: bool) -> void:
+	if not _roster.has(peer_id):
+		_remove_field_player(peer_id)
+		return
+
+	var entry := _get_roster_entry(peer_id)
+	var team_id := int(entry.get("team_id", GameEnums.TeamId.NEUTRAL))
+	if team_id == GameEnums.TeamId.NEUTRAL:
+		_remove_field_player(peer_id)
+		return
+
+	var player := _field_players.get(peer_id) as HexPlayer
+	var created := false
+	if player == null:
+		player = PLAYER_SCENE.instantiate() as HexPlayer
+		player.name = "Player_%d" % peer_id
+		entities_root.add_child(player)
+		_field_players[peer_id] = player
+		player.assign_ball(ball)
+		created = true
+
+	player.player_id = peer_id
+	player.team_id = team_id as GameEnums.TeamId
+	player.set_controller_peer_id(peer_id)
+	player.set_display_name(str(entry.get("name", "Player")))
+	player.set_field_active(true)
+	player.visible = true
+	player.facing_direction = Vector2.RIGHT if team_id == GameEnums.TeamId.RED else Vector2.LEFT
+	if created or reposition:
+		player.set_spawn_position(_get_random_spawn_position(team_id, peer_id))
+		player.reset_to_spawn()
+	player.set_input_enabled(not _match_over)
+
+
+func _remove_field_player(peer_id: int) -> void:
+	var player := _field_players.get(peer_id) as HexPlayer
+	if player == null:
+		return
+	player.queue_free()
+	_field_players.erase(peer_id)
+
+
+func _remove_all_field_players() -> void:
+	for peer_id in _field_players.keys():
+		var player := _field_players[peer_id] as HexPlayer
+		if player != null:
+			player.queue_free()
+	_field_players.clear()
+	_refresh_ball_player_tracking()
+
+
+func _refresh_ball_player_tracking() -> void:
+	ball.register_players(_get_active_players())
+
+
+func _get_active_players() -> Array[HexPlayer]:
+	var players: Array[HexPlayer] = []
+	var peer_ids := _field_players.keys()
+	peer_ids.sort()
+	for peer_id in peer_ids:
+		var player := _field_players[peer_id] as HexPlayer
+		if player != null and player.is_inside_tree() and player.is_field_active():
+			players.append(player)
+	return players
+
+
+func _get_roster_entry(peer_id: int) -> Dictionary:
+	if _roster.has(peer_id):
+		var entry: Dictionary = _roster[peer_id]
+		return entry.duplicate(true)
+	return {}
+
+
+func _get_random_spawn_position(team_id: int, peer_id: int) -> Vector2:
+	var half_field := GameSettings.FIELD_SIZE * 0.5
+	var margin_x := 120.0
+	var margin_y := 80.0
+	var center_gap := 85.0
+	var min_x := -half_field.x + margin_x
+	var max_x := -center_gap
+	if team_id == GameEnums.TeamId.BLUE:
+		min_x = center_gap
+		max_x = half_field.x - margin_x
+
+	var best_position := Vector2(0.0, 0.0)
+	for _i in range(14):
+		var candidate := Vector2(
+			randf_range(min_x, max_x),
+			randf_range(-half_field.y + margin_y, half_field.y - margin_y)
+		)
+		if _is_spawn_position_free(candidate, peer_id):
+			return candidate
+		best_position = candidate
+	return best_position
+
+
+func _is_spawn_position_free(candidate: Vector2, ignored_peer_id: int) -> bool:
+	for peer_id in _field_players.keys():
+		if peer_id == ignored_peer_id:
+			continue
+		var player := _field_players[peer_id] as HexPlayer
+		if player == null or not player.is_field_active():
+			continue
+		if player.position.distance_to(candidate) < GameSettings.PLAYER_RADIUS * 2.4:
+			return false
+	return candidate.distance_to(ball.position) > GameSettings.PLAYER_RADIUS * 2.2
+
+
+func _configure_goals(enabled: bool) -> void:
+	for goal_node in goals_root.get_children():
+		var goal := goal_node as GoalZone
+		if goal != null:
+			goal.set_scoring_enabled(enabled)
+
+
+func _configure_match_activity(active: bool) -> void:
+	for player in _get_active_players():
+		if player != null:
+			player.set_input_enabled(active)
+	ball.set_ball_motion_enabled(active)
+
+
+func _apply_simulation_state() -> void:
+	var simulation_active := not _match_over and not _hard_paused
+	_configure_match_activity(simulation_active)
+	if _is_authority():
+		if simulation_active:
+			time_system.start()
+		else:
+			time_system.stop()
+
+
+func _set_hard_paused(value: bool) -> void:
+	if _hard_paused == value:
+		return
+	_hard_paused = value
+	_apply_simulation_state()
+	_configure_goals(not _match_over and not _hard_paused and _goal_reset_remaining < 0.0)
+	hard_pause_changed.emit(_hard_paused)
+	if _is_authority():
+		_broadcast_world_state()
+
+
+func _register_goal(scoring_team: int) -> void:
+	if _match_over:
+		return
 	if scoring_team == GameEnums.TeamId.RED:
 		red_score += 1
 	else:
 		blue_score += 1
 
 	score_changed.emit(red_score, blue_score)
-	var scorer_id := ball.last_touch_player_id
-	GameEvents.emit_goal_scored(scoring_team, scorer_id)
-	announcement_requested.emit("%s Scores!" % Helpers.team_name(scoring_team), Helpers.team_color(scoring_team), goal_pause_duration)
-	_broadcast_announcement("%s Scores!" % Helpers.team_name(scoring_team), Helpers.team_color(scoring_team), goal_pause_duration)
-	_schedule_post_goal_flow()
+	_set_state(GameEnums.MatchState.GOAL_SCORED)
+	_configure_goals(false)
+	_goal_reset_remaining = DEFAULT_GOAL_RESET_DELAY
+	var announcement_text := "%s scored" % Helpers.team_name(scoring_team)
+	announcement_requested.emit(announcement_text, Helpers.team_color(scoring_team), 1.0)
+	GameEvents.emit_goal_scored(scoring_team, ball.last_touch_player_id)
+	_broadcast_world_state()
+	_broadcast_room_state()
 
 
-func _schedule_post_goal_flow() -> void:
-	_flow_version += 1
-	_schedule_post_goal_flow_async(_flow_version)
+func _broadcast_room_state() -> void:
+	if _is_authority():
+		var local_snapshot := _build_room_state_snapshot(NetworkManager.get_local_peer_id() if NetworkManager.is_online else 1)
+		_apply_room_state_snapshot(local_snapshot)
+		if NetworkManager.is_online:
+			for peer_id in NetworkManager.get_connected_peer_ids():
+				_rpc_receive_room_state.rpc_id(peer_id, _build_room_state_snapshot(peer_id))
+	else:
+		room_state_changed.emit(_build_room_state_snapshot(NetworkManager.get_local_peer_id()))
 
 
-func _schedule_post_goal_flow_async(flow_version: int) -> void:
-	await get_tree().create_timer(goal_pause_duration).timeout
-	if not _is_flow_valid(flow_version):
-		return
-	reset_system.reset_world(_players, ball)
-	_start_playing()
-	_apply_online_slot_state()
+func _build_room_state_snapshot(viewer_peer_id: int) -> Dictionary:
+	var all_entries: Array = []
+	var red_entries: Array = []
+	var spectator_entries: Array = []
+	var blue_entries: Array = []
+
+	var peer_ids := _roster.keys()
+	peer_ids.sort_custom(Callable(self, "_sort_roster_peer_ids"))
+
+	for peer_id in peer_ids:
+		var entry := _serialize_room_entry(_get_roster_entry(int(peer_id)))
+		all_entries.append(entry)
+		var team_id := int(entry.get("team_id", GameEnums.TeamId.NEUTRAL))
+		if team_id == GameEnums.TeamId.RED:
+			red_entries.append(entry)
+		elif team_id == GameEnums.TeamId.BLUE:
+			blue_entries.append(entry)
+		else:
+			spectator_entries.append(entry)
+
+	return {
+		"room_name": _get_room_name(),
+		"entries": all_entries,
+		"red": red_entries,
+		"spectators": spectator_entries,
+		"blue": blue_entries,
+		"can_manage": _can_manage_roster(viewer_peer_id),
+		"match_over": _match_over,
+		"result_title": _result_title,
+		"result_detail": _result_detail,
+		"red_score": red_score,
+		"blue_score": blue_score,
+		"local_peer_id": viewer_peer_id
+	}
 
 
-func _on_time_changed(remaining_seconds: float) -> void:
-	timer_changed.emit(remaining_seconds)
+func _serialize_room_entry(entry: Dictionary) -> Dictionary:
+	return {
+		"peer_id": int(entry.get("peer_id", -1)),
+		"name": str(entry.get("name", "Player")),
+		"team_id": int(entry.get("team_id", GameEnums.TeamId.NEUTRAL)),
+		"is_host": bool(entry.get("is_host", false)),
+		"is_admin": bool(entry.get("is_admin", false))
+	}
 
 
-func _on_time_expired() -> void:
-	if state_machine.is_in_state(GameEnums.MatchState.MATCH_ENDED):
-		return
-	_flow_version += 1
-	state_machine.transition_to(GameEnums.MatchState.MATCH_ENDED)
-	_set_world_active(false)
-	_set_goals_enabled(false)
-	var winner_title := Helpers.winner_text(red_score, blue_score)
-	var detail := "Red %d - %d Blue" % [red_score, blue_score]
-	match_finished.emit(winner_title, detail)
-	GameEvents.emit_match_ended(_winner_team_id(), red_score, blue_score)
+func _apply_room_state_snapshot(snapshot: Dictionary) -> void:
+	var previous_match_over := _match_over
+	_match_over = bool(snapshot.get("match_over", _match_over))
+	var entries: Array = []
+	var raw_entries: Variant = snapshot.get("entries", [])
+	if typeof(raw_entries) == TYPE_ARRAY:
+		entries = raw_entries
+	if typeof(entries) == TYPE_ARRAY:
+		_roster.clear()
+		for entry_data in entries:
+			if typeof(entry_data) != TYPE_DICTIONARY:
+				continue
+			var peer_id := int(entry_data.get("peer_id", -1))
+			if peer_id < 0:
+				continue
+			_roster[peer_id] = entry_data.duplicate(true)
 
-
-func _winner_team_id() -> int:
-	if red_score > blue_score:
-		return GameEnums.TeamId.RED
-	if blue_score > red_score:
-		return GameEnums.TeamId.BLUE
-	return GameEnums.TeamId.NEUTRAL
-
-
-func _set_world_active(active: bool) -> void:
-	for player in _players:
-		player.set_input_enabled(active)
-	ball.set_ball_motion_enabled(active)
-
-
-func _set_goals_enabled(active: bool) -> void:
-	left_goal.set_scoring_enabled(active)
-	right_goal.set_scoring_enabled(active)
-
-
-func _on_state_changed(_previous_state: int, _new_state: int) -> void:
-	state_updated.emit(state_machine.state_name())
-	if not state_machine.is_in_state(GameEnums.MatchState.PAUSED):
+	for peer_id in _field_players.keys():
+		var entry := _get_roster_entry(int(peer_id))
+		if entry.is_empty() or int(entry.get("team_id", GameEnums.TeamId.NEUTRAL)) == GameEnums.TeamId.NEUTRAL:
+			_remove_field_player(int(peer_id))
+	_refresh_ball_player_tracking()
+	if _match_over and not previous_match_over and not is_paused:
+		is_paused = true
+		pause_changed.emit(true)
+	elif previous_match_over and not _match_over and is_paused:
+		is_paused = false
 		pause_changed.emit(false)
-	_sync_world_activity()
+	room_state_changed.emit(snapshot)
 
 
-func _is_flow_valid(flow_version: int) -> bool:
-	return flow_version == _flow_version
-
-
-func _physics_process(_delta: float) -> void:
-	if not NetworkManager.is_online:
+func _broadcast_world_state() -> void:
+	if not _is_authority():
 		return
-	if not NetworkManager.is_host():
-		return
-	var peers := NetworkManager.get_connected_peer_ids()
-	if peers.is_empty():
-		return
-	_broadcast_state(peers)
 
+	var players: Array = []
+	var peer_ids := _field_players.keys()
+	peer_ids.sort()
+	for peer_id in peer_ids:
+		var player := _field_players[peer_id] as HexPlayer
+		if player == null or not player.is_field_active():
+			continue
+		players.append({
+			"peer_id": int(peer_id),
+			"team_id": player.team_id,
+			"name": player.display_name,
+			"state": player.build_net_state()
+		})
 
-func _broadcast_state(peers: Array[int]) -> void:
 	var snapshot := {
-		"p1": player_red.build_net_state(),
-		"p2": player_blue.build_net_state(),
+		"players": players,
 		"ball": ball.build_net_state(),
 		"rs": red_score,
 		"bs": blue_score,
 		"timer": time_system.remaining_seconds,
-		"ms": state_machine.current_state
+		"ms": state_machine.current_state,
+		"hp": _hard_paused,
+		"match_over": _match_over,
+		"goal_reset": _goal_reset_remaining
 	}
-	for peer_id in peers:
-		_rpc_receive_state.rpc_id(peer_id, snapshot)
+
+	if NetworkManager.is_online:
+		_rpc_receive_world_state.rpc(snapshot)
 
 
-@rpc("authority", "unreliable", "call_remote")
-func _rpc_receive_state(snapshot: Dictionary) -> void:
-	player_red.apply_net_state(snapshot["p1"])
-	player_blue.apply_net_state(snapshot["p2"])
-	ball.apply_net_state(snapshot["ball"])
+func _apply_world_state_snapshot(snapshot: Dictionary) -> void:
+	red_score = int(snapshot.get("rs", red_score))
+	blue_score = int(snapshot.get("bs", blue_score))
+	_match_over = bool(snapshot.get("match_over", false))
+	_goal_reset_remaining = float(snapshot.get("goal_reset", -1.0))
+	var hard_paused := bool(snapshot.get("hp", false))
+	if hard_paused != _hard_paused:
+		_hard_paused = hard_paused
+		hard_pause_changed.emit(_hard_paused)
+	score_changed.emit(red_score, blue_score)
+	timer_changed.emit(float(snapshot.get("timer", time_system.remaining_seconds)))
+	_set_state(int(snapshot.get("ms", state_machine.current_state)) as GameEnums.MatchState)
 
-	if red_score != snapshot["rs"] or blue_score != snapshot["bs"]:
-		red_score = snapshot["rs"]
-		blue_score = snapshot["bs"]
-		score_changed.emit(red_score, blue_score)
+	var players: Array = []
+	var raw_players: Variant = snapshot.get("players", [])
+	if typeof(raw_players) == TYPE_ARRAY:
+		players = raw_players
+	_reconcile_remote_players(players)
 
-	timer_changed.emit(snapshot["timer"])
+	var ball_state: Dictionary = {}
+	var raw_ball_state: Variant = snapshot.get("ball", {})
+	if typeof(raw_ball_state) == TYPE_DICTIONARY:
+		ball_state = raw_ball_state
+	if typeof(ball_state) == TYPE_DICTIONARY:
+		ball.apply_net_state(ball_state)
 
-	var remote_match_state: int = snapshot["ms"]
-	if not state_machine.is_in_state(remote_match_state):
-		state_machine.transition_to(remote_match_state)
-
-
-@rpc("authority", "reliable", "call_remote")
-func _rpc_receive_announcement(text: String, r: float, g: float, b: float, duration: float) -> void:
-	announcement_requested.emit(text, Color(r, g, b), duration)
+	_configure_goals(not _match_over and not _hard_paused and _goal_reset_remaining < 0.0)
 
 
-func _broadcast_announcement(text: String, color: Color, duration: float) -> void:
-	if not NetworkManager.is_online or not NetworkManager.is_host():
+func _reconcile_remote_players(players: Variant) -> void:
+	if typeof(players) != TYPE_ARRAY:
 		return
-	for peer_id in NetworkManager.get_connected_peer_ids():
-		_rpc_receive_announcement.rpc_id(peer_id, text, color.r, color.g, color.b, duration)
+
+	var active_peer_ids: Array = []
+	for player_data in players:
+		if typeof(player_data) != TYPE_DICTIONARY:
+			continue
+		var peer_id := int(player_data.get("peer_id", -1))
+		if peer_id < 0:
+			continue
+		active_peer_ids.append(peer_id)
+		var team_id := int(player_data.get("team_id", GameEnums.TeamId.NEUTRAL))
+		var entry := _get_roster_entry(peer_id)
+		if entry.is_empty():
+			entry = _make_roster_entry(peer_id, str(player_data.get("name", "Player")), team_id, false, false)
+			_roster[peer_id] = entry
+		else:
+			entry["team_id"] = team_id
+			entry["name"] = str(player_data.get("name", entry.get("name", "Player")))
+			_roster[peer_id] = entry
+
+		_update_field_player_from_roster(peer_id, false)
+		var player := _field_players.get(peer_id) as HexPlayer
+		if player == null:
+			continue
+		var net_state: Dictionary = {}
+		var raw_state: Variant = player_data.get("state", {})
+		if typeof(raw_state) == TYPE_DICTIONARY:
+			net_state = raw_state
+		if typeof(net_state) == TYPE_DICTIONARY:
+			player.team_id = team_id as GameEnums.TeamId
+			player.apply_net_state(net_state)
+
+	for peer_id in _field_players.keys():
+		if not active_peer_ids.has(int(peer_id)):
+			_remove_field_player(int(peer_id))
+
+	_refresh_ball_player_tracking()
+
+
+func _can_manage_roster(peer_id: int) -> bool:
+	if not NetworkManager.is_online:
+		return true
+	var entry := _get_roster_entry(peer_id)
+	return bool(entry.get("is_host", false)) or bool(entry.get("is_admin", false))
+
+
+func _is_authority() -> bool:
+	return not NetworkManager.is_online or NetworkManager.is_host()
+
+
+func _is_banned_name(player_name: String) -> bool:
+	return _banned_names.has(_normalize_name(player_name))
+
+
+func _normalize_name(player_name: String) -> String:
+	return player_name.strip_edges().to_lower()
+
+
+func _sort_roster_peer_ids(a: Variant, b: Variant) -> bool:
+	var left := _get_roster_entry(int(a))
+	var right := _get_roster_entry(int(b))
+	if bool(left.get("is_host", false)) != bool(right.get("is_host", false)):
+		return bool(left.get("is_host", false))
+	return str(left.get("name", "")).nocasecmp_to(str(right.get("name", ""))) < 0
+
+
+func _get_room_name() -> String:
+	if NetworkManager.active_lobby_name.is_empty():
+		return LOCAL_ROOM_NAME
+	return NetworkManager.active_lobby_name
+
+
+func _submit_local_name_deferred() -> void:
+	if not NetworkManager.is_online or NetworkManager.is_host():
+		return
+	_rpc_submit_player_name.rpc_id(1, GameSettings.player_name)
+
+
+func _set_state(new_state: int) -> void:
+	if state_machine.current_state == new_state:
+		return
+	state_machine.transition_to(new_state as GameEnums.MatchState)
+
+
+func _emit_state_name() -> void:
+	state_updated.emit(state_machine.state_name())
+
+
+func _on_state_changed(_previous_state: int, _new_state: int) -> void:
+	_emit_state_name()
+
+
+func _on_time_changed(remaining_seconds: float) -> void:
+	if not _is_authority():
+		return
+	timer_changed.emit(remaining_seconds)
+
+
+func _on_time_expired() -> void:
+	if not _is_authority():
+		return
+	_match_over = true
+	_hard_paused = false
+	hard_pause_changed.emit(false)
+	_result_title = Helpers.winner_text(red_score, blue_score)
+	_result_detail = "Red %d - %d Blue" % [red_score, blue_score]
+	_configure_match_activity(false)
+	_configure_goals(false)
+	_goal_reset_remaining = -1.0
+	_set_state(GameEnums.MatchState.MATCH_ENDED)
+	match_finished.emit(_result_title, _result_detail)
+	announcement_requested.emit("Sure bitti", Color(1.0, 0.95, 0.72, 1.0), 1.0)
+	if not is_paused:
+		is_paused = true
+		pause_changed.emit(true)
+	_broadcast_room_state()
+	_broadcast_world_state()
+
+
+func _on_goal_scored(scoring_team: int, _defending_team: int) -> void:
+	if not _is_authority():
+		return
+	_register_goal(scoring_team)
+
+
+func _on_network_peer_connected(peer_id: int) -> void:
+	if not _is_authority():
+		return
+	if _roster.has(peer_id):
+		return
+	_roster[peer_id] = _make_roster_entry(peer_id, "Player %d" % peer_id, GameEnums.TeamId.NEUTRAL, false, false)
+	_broadcast_room_state()
+
+
+func _on_network_peer_disconnected(peer_id: int) -> void:
+	_remove_field_player(peer_id)
+	if _roster.has(peer_id):
+		_roster.erase(peer_id)
+	_refresh_ball_player_tracking()
+	if _is_authority():
+		_broadcast_room_state()
+		_broadcast_world_state()
+
+
+func _on_network_server_disconnected() -> void:
+	_remove_all_field_players()
+	_roster.clear()
+	_refresh_ball_player_tracking()

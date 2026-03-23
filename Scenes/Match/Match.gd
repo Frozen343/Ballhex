@@ -4,7 +4,7 @@ extends Node
 @onready var match_manager: MatchManager = $Managers/MatchManager
 @onready var match_hud: MatchHUD = $UI/MatchHUD
 @onready var pause_menu: PauseMenu = $UI/PauseMenu
-@onready var end_match_panel: EndMatchPanel = $UI/EndMatchPanel
+@onready var end_match_panel: Control = $UI/EndMatchPanel
 @onready var debug_overlay: DebugOverlay = $Debug/DebugOverlay
 
 
@@ -13,7 +13,7 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_center_world)
 	_connect_ui()
 	pause_menu.hide_panel()
-	end_match_panel.hide_panel()
+	end_match_panel.visible = false
 	debug_overlay.set_visible(GameSettings.debug_overlay_enabled)
 	match_manager.start_new_match()
 
@@ -26,6 +26,11 @@ func _process(_delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("pause"):
 		match_manager.toggle_pause()
+		get_viewport().set_input_as_handled()
+		return
+
+	if event.is_action_pressed("hard_pause"):
+		match_manager.toggle_hard_pause()
 		get_viewport().set_input_as_handled()
 		return
 
@@ -60,20 +65,20 @@ func _connect_ui() -> void:
 	match_manager.timer_changed.connect(match_hud.update_timer)
 	match_manager.announcement_requested.connect(match_hud.show_announcement)
 	match_manager.pause_changed.connect(_on_pause_changed)
+	match_manager.hard_pause_changed.connect(match_hud.set_pause_overlay_visible)
 	match_manager.match_finished.connect(_on_match_finished)
 	match_manager.state_updated.connect(debug_overlay.set_state_name)
-	match_manager.lobby_state_changed.connect(match_hud.update_lobby_room)
+	match_manager.room_state_changed.connect(pause_menu.update_room_state)
 
 	pause_menu.resume_requested.connect(match_manager.toggle_pause)
+	pause_menu.restart_requested.connect(match_manager.restart_match)
 	pause_menu.menu_requested.connect(_return_to_menu)
-	end_match_panel.restart_requested.connect(match_manager.restart_match)
-	end_match_panel.menu_requested.connect(_return_to_menu)
-	match_hud.assign_red_requested.connect(match_manager.assign_peer_to_red)
-	match_hud.assign_blue_requested.connect(match_manager.assign_peer_to_blue)
-	match_hud.bench_requested.connect(match_manager.assign_peer_to_waiting)
-
-	if not NetworkManager.is_online:
-		match_hud.hide_lobby_room()
+	pause_menu.assign_red_requested.connect(match_manager.assign_peer_to_red)
+	pause_menu.assign_blue_requested.connect(match_manager.assign_peer_to_blue)
+	pause_menu.assign_spectator_requested.connect(match_manager.assign_peer_to_waiting)
+	pause_menu.kick_requested.connect(match_manager.kick_peer)
+	pause_menu.ban_requested.connect(match_manager.ban_peer)
+	pause_menu.toggle_admin_requested.connect(match_manager.toggle_peer_admin)
 
 
 func _center_world() -> void:
@@ -97,11 +102,10 @@ func _on_pause_changed(is_paused: bool) -> void:
 		pause_menu.hide_panel()
 
 
-func _on_match_finished(title: String, detail: String) -> void:
+func _on_match_finished(title: String, _detail: String) -> void:
 	if title.is_empty():
-		end_match_panel.hide_panel()
 		return
-	end_match_panel.show_result(title, detail)
+	pause_menu.show_panel()
 
 
 func _return_to_menu() -> void:

@@ -32,7 +32,7 @@ func _ready() -> void:
 
 func set_scoring_enabled(value: bool) -> void:
 	scoring_enabled = value
-	goal_area.monitoring = value
+	goal_area.set_deferred("monitoring", value)
 
 
 func _rebuild_shapes() -> void:

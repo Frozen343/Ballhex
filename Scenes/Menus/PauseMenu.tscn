@@ -27,46 +27,179 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0, 0, 0, 0.48)
+color = Color(0.02, 0.03, 0.04, 0.62)
 
-[node name="Panel" type="Panel" parent="Backdrop"]
-custom_minimum_size = Vector2(360, 250)
+[node name="Card" type="Panel" parent="Backdrop"]
+custom_minimum_size = Vector2(960, 560)
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -180.0
-offset_top = -125.0
-offset_right = 180.0
-offset_bottom = 125.0
+offset_left = -480.0
+offset_top = -280.0
+offset_right = 480.0
+offset_bottom = 280.0
 
-[node name="VBox" type="VBoxContainer" parent="Backdrop/Panel"]
+[node name="Margin" type="MarginContainer" parent="Backdrop/Card"]
 layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -130.0
-offset_top = -80.0
-offset_right = 130.0
-offset_bottom = 80.0
-theme_override_constants/separation = 16
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 18
 
-[node name="Title" type="Label" parent="Backdrop/Panel/VBox"]
+[node name="Layout" type="VBoxContainer" parent="Backdrop/Card/Margin"]
 layout_mode = 2
-text = "Paused"
-horizontal_alignment = 1
-theme_override_font_sizes/font_size = 36
+theme_override_constants/separation = 14
 
-[node name="ResumeButton" type="Button" parent="Backdrop/Panel/VBox"]
+[node name="TopBar" type="HBoxContainer" parent="Backdrop/Card/Margin/Layout"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 48)
+
+[node name="RoomName" type="Label" parent="Backdrop/Card/Margin/Layout/TopBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Room"
+theme_override_font_sizes/font_size = 30
+
+[node name="Buttons" type="HBoxContainer" parent="Backdrop/Card/Margin/Layout/TopBar"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ResumeButton" type="Button" parent="Backdrop/Card/Margin/Layout/TopBar/Buttons"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 42)
 text = "Resume"
 
-[node name="MenuButton" type="Button" parent="Backdrop/Panel/VBox"]
+[node name="RestartButton" type="Button" parent="Backdrop/Card/Margin/Layout/TopBar/Buttons"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 48)
-text = "Main Menu"
+custom_minimum_size = Vector2(0, 42)
+text = "Restart"
+
+[node name="MenuButton" type="Button" parent="Backdrop/Card/Margin/Layout/TopBar/Buttons"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 42)
+text = "Leave"
+
+[node name="Divider" type="ColorRect" parent="Backdrop/Card/Margin/Layout"]
+custom_minimum_size = Vector2(0, 3)
+layout_mode = 2
+color = Color(0.82, 0.18, 0.2, 1)
+
+[node name="Body" type="VBoxContainer" parent="Backdrop/Card/Margin/Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 12
+
+[node name="ResultLabel" type="Label" parent="Backdrop/Card/Margin/Layout/Body"]
+layout_mode = 2
+text = "Score: Red 0 - 0 Blue"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 24
+
+[node name="Columns" type="HBoxContainer" parent="Backdrop/Card/Margin/Layout/Body"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 10
+
+[node name="RedColumn" type="VBoxContainer" parent="Backdrop/Card/Margin/Layout/Body/Columns"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="RedTitle" type="Label" parent="Backdrop/Card/Margin/Layout/Body/Columns/RedColumn"]
+layout_mode = 2
+text = "Red"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(0.97, 0.39, 0.34, 1)
+
+[node name="RedList" type="ItemList" parent="Backdrop/Card/Margin/Layout/Body/Columns/RedColumn"]
+custom_minimum_size = Vector2(0, 280)
+layout_mode = 2
+size_flags_vertical = 3
+allow_reselect = true
+select_mode = 0
+theme_override_font_sizes/font_size = 18
+
+[node name="SpectatorsColumn" type="VBoxContainer" parent="Backdrop/Card/Margin/Layout/Body/Columns"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="SpectatorsTitle" type="Label" parent="Backdrop/Card/Margin/Layout/Body/Columns/SpectatorsColumn"]
+layout_mode = 2
+text = "Spectators"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 22
+
+[node name="SpectatorsList" type="ItemList" parent="Backdrop/Card/Margin/Layout/Body/Columns/SpectatorsColumn"]
+custom_minimum_size = Vector2(0, 280)
+layout_mode = 2
+size_flags_vertical = 3
+allow_reselect = true
+select_mode = 0
+theme_override_font_sizes/font_size = 18
+
+[node name="BlueColumn" type="VBoxContainer" parent="Backdrop/Card/Margin/Layout/Body/Columns"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="BlueTitle" type="Label" parent="Backdrop/Card/Margin/Layout/Body/Columns/BlueColumn"]
+layout_mode = 2
+text = "Blue"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(0.43, 0.64, 1, 1)
+
+[node name="BlueList" type="ItemList" parent="Backdrop/Card/Margin/Layout/Body/Columns/BlueColumn"]
+custom_minimum_size = Vector2(0, 280)
+layout_mode = 2
+size_flags_vertical = 3
+allow_reselect = true
+select_mode = 0
+theme_override_font_sizes/font_size = 18
+
+[node name="Bottom" type="VBoxContainer" parent="Backdrop/Card/Margin/Layout"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="ManageRow" type="HBoxContainer" parent="Backdrop/Card/Margin/Layout/Bottom"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="SendRedButton" type="Button" parent="Backdrop/Card/Margin/Layout/Bottom/ManageRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 42)
+text = "Send Red"
+
+[node name="SendSpectatorsButton" type="Button" parent="Backdrop/Card/Margin/Layout/Bottom/ManageRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 42)
+text = "Spectate"
+
+[node name="SendBlueButton" type="Button" parent="Backdrop/Card/Margin/Layout/Bottom/ManageRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 42)
+text = "Send Blue"
+
+[node name="HelperLabel" type="Label" parent="Backdrop/Card/Margin/Layout/Bottom"]
+layout_mode = 2
+text = "Left click: select player   Right click: admin actions"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0.82, 0.87, 0.92, 0.86)
+
+[node name="ContextMenu" type="PopupMenu" parent="."]

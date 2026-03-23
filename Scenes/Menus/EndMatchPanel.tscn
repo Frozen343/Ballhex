@@ -27,52 +27,85 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.0196078, 0.0313726, 0.0392157, 0.62)
+color = Color(0.02, 0.03, 0.04, 0.6)
 
-[node name="Panel" type="Panel" parent="Backdrop"]
-custom_minimum_size = Vector2(440, 300)
+[node name="Card" type="Panel" parent="Backdrop"]
+custom_minimum_size = Vector2(760, 360)
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -220.0
-offset_top = -150.0
-offset_right = 220.0
-offset_bottom = 150.0
+offset_left = -380.0
+offset_top = -180.0
+offset_right = 380.0
+offset_bottom = 180.0
 
-[node name="VBox" type="VBoxContainer" parent="Backdrop/Panel"]
+[node name="Margin" type="MarginContainer" parent="Backdrop/Card"]
 layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -160.0
-offset_top = -110.0
-offset_right = 160.0
-offset_bottom = 110.0
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 18
+
+[node name="VBox" type="VBoxContainer" parent="Backdrop/Card/Margin"]
+layout_mode = 2
 theme_override_constants/separation = 18
 
-[node name="Title" type="Label" parent="Backdrop/Panel/VBox"]
+[node name="TopBar" type="HBoxContainer" parent="Backdrop/Card/Margin/VBox"]
 layout_mode = 2
-text = "Result"
-horizontal_alignment = 1
-theme_override_font_sizes/font_size = 38
 
-[node name="Detail" type="Label" parent="Backdrop/Panel/VBox"]
+[node name="RoomName" type="Label" parent="Backdrop/Card/Margin/VBox/TopBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Match finished"
+theme_override_font_sizes/font_size = 28
+
+[node name="Buttons" type="HBoxContainer" parent="Backdrop/Card/Margin/VBox/TopBar"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="RestartButton" type="Button" parent="Backdrop/Card/Margin/VBox/TopBar/Buttons"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 42)
+text = "Play Again"
+
+[node name="MenuButton" type="Button" parent="Backdrop/Card/Margin/VBox/TopBar/Buttons"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 42)
+text = "Room List"
+
+[node name="Divider" type="ColorRect" parent="Backdrop/Card/Margin/VBox"]
+custom_minimum_size = Vector2(0, 3)
+layout_mode = 2
+color = Color(0.8, 0.18, 0.2, 1)
+
+[node name="Body" type="VBoxContainer" parent="Backdrop/Card/Margin/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+alignment = 1
+theme_override_constants/separation = 16
+
+[node name="Title" type="Label" parent="Backdrop/Card/Margin/VBox/Body"]
+layout_mode = 2
+text = "Match finished"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 46
+
+[node name="Detail" type="Label" parent="Backdrop/Card/Margin/VBox/Body"]
 layout_mode = 2
 text = "Red 0 - 0 Blue"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 20
+theme_override_font_sizes/font_size = 24
 
-[node name="RestartButton" type="Button" parent="Backdrop/Panel/VBox"]
+[node name="Footer" type="Label" parent="Backdrop/Card/Margin/VBox/Body"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 48)
-text = "Restart Match"
-
-[node name="MenuButton" type="Button" parent="Backdrop/Panel/VBox"]
-layout_mode = 2
-custom_minimum_size = Vector2(0, 48)
-text = "Main Menu"
+text = "Use Play Again to restart instantly or Room List to leave the match."
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 18
