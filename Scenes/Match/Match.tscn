@@ -10,7 +10,7 @@
 [ext_resource type="Script" path="res://Scenes/Systems/TimeSystem/TimeSystem.gd" id="8"]
 [ext_resource type="Script" path="res://Scenes/Systems/MatchManager/MatchManager.gd" id="9"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/Hud/MatchHUD.tscn" id="10"]
-[ext_resource type="PackedScene" path="res://Scenes/UI/Hud/LobbyMenu.tscn" id="11"]
+[ext_resource type="PackedScene" path="res://Scenes/Menus/PauseMenu.tscn" id="11"]
 [ext_resource type="PackedScene" path="res://Scenes/Menus/EndMatchPanel.tscn" id="12"]
 [ext_resource type="PackedScene" path="res://Scenes/Systems/Debug/DebugOverlay.tscn" id="13"]
 
@@ -37,6 +37,18 @@ is_left_goal = false
 
 [node name="Entities" type="Node2D" parent="World"]
 
+[node name="PlayerRed" parent="World/Entities" instance=ExtResource("3")]
+position = Vector2(-290, 0)
+player_id = 1
+team_id = 0
+display_name = "Red Player"
+
+[node name="PlayerBlue" parent="World/Entities" instance=ExtResource("3")]
+position = Vector2(290, 0)
+player_id = 2
+team_id = 1
+display_name = "Blue Player"
+
 [node name="Ball" parent="World/Entities" instance=ExtResource("4")]
 
 [node name="Managers" type="Node" parent="."]
@@ -57,7 +69,7 @@ script = ExtResource("9")
 
 [node name="MatchHUD" parent="UI" instance=ExtResource("10")]
 
-[node name="LobbyMenu" parent="UI" instance=ExtResource("11")]
+[node name="PauseMenu" parent="UI" instance=ExtResource("11")]
 
 [node name="EndMatchPanel" parent="UI" instance=ExtResource("12")]
 

@@ -1,10 +1,7 @@
 63f7b34db8d8cdea90c76aacccf841ec
-::res://::1774270937
-.gitignore.txt::TextFile::-1::1774270122::0::1::::<><><>0<>0<><>::
+::res://::1774271139
+.gitignore.txt::TextFile::-1::1774271276::0::1::::<><><>0<>0<><>::
 export_presets.cfg::TextFile::-1::1774270937::0::1::::<><><>0<>0<><>::
-Hexball Prototype.apple-touch-icon.png::CompressedTexture2D::261770442832402117::1774270936::1774270958::1::::<><><>0<>0<>8bf3529fa46c0cd92096862abe8212bb<>res://.godot/imported/Hexball Prototype.apple-touch-icon.png-d44b82e7c19245b4dcdec206b3df6786.ctex::
-Hexball Prototype.icon.png::CompressedTexture2D::4311037012465070419::1774270936::1774270958::1::::<><><>0<>0<>8f99161065ec141a8e6bcb2de77d4e4c<>res://.godot/imported/Hexball Prototype.icon.png-a7f0b04147d77cd2f6882d39e69f8cb1.ctex::
-Hexball Prototype.png::CompressedTexture2D::4750905325491636924::1774270936::1774270958::1::::<><><>0<>0<>581b677cd7d325cbaa41e2df0b7168b0<>res://.godot/imported/Hexball Prototype.png-d12a6db1a7c8d7768fe20c1f5f5c233a.ctex::
 icon.svg::CompressedTexture2D::2592738358081623052::1774126061::1774127403::1::::<><><>0<>0<>272c7866b8af2bbd23e210b1d9e583c3<>res://.godot/imported/icon.svg-218a8f2b3041327d8a5756f3a245f83b.ctex::
 Workflow.md::TextFile::-1::1774125777::0::1::::<><><>0<>0<><>::
 ::res://Autoload/::1774192021
@@ -73,3 +70,7 @@ MathUtils.gd::GDScript::6385999330135272462::1774126061::0::1::::MathUtils<>RefC
 ::res://Tests/Sandbox/::1774126590
 BallTuning.tscn::PackedScene::-1::1774126590::0::1::::<><><>0<>0<><>::res://Scenes/Match/Match.tscn
 CollisionTuning.tscn::PackedScene::-1::1774126590::0::1::::<><><>0<>0<><>::res://Scenes/Match/Match.tscn
+::res://web/::1774271476
+Hexball Prototype.apple-touch-icon.png::CompressedTexture2D::3883396602830966097::1774270936::1774271876::1::::<><><>0<>0<>6587099dcf2554e6698923712cd19397<>res://.godot/imported/Hexball Prototype.apple-touch-icon.png-c831d9107e7520c499943336e4b85e75.ctex::
+Hexball Prototype.icon.png::CompressedTexture2D::6957804129649607382::1774270936::1774271876::1::::<><><>0<>0<>aabdc6f44cdf8e474785baafa6bc8b34<>res://.godot/imported/Hexball Prototype.icon.png-20aa1da33d826558be19a73b405af4ab.ctex::
+Hexball Prototype.png::CompressedTexture2D::829490105190462580::1774270936::1774271876::1::::<><><>0<>0<>4be347f73ab6573697163f18d0f760b8<>res://.godot/imported/Hexball Prototype.png-b110e1c4470004105ac57873b4b139df.ctex::

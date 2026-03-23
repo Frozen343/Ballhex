@@ -5,7 +5,6 @@ class_name MainMenu
 @onready var host_button: Button = $Center/Panel/VBox/HostButton
 @onready var join_button: Button = $Center/Panel/VBox/JoinButton
 @onready var quit_button: Button = $Center/Panel/VBox/QuitButton
-@onready var name_input: LineEdit = $Center/Panel/VBox/NameInput
 @onready var ip_input: LineEdit = $Center/Panel/VBox/JoinRow/IpInput
 @onready var status_label: Label = $Center/Panel/VBox/StatusLabel
 @onready var join_row: HBoxContainer = $Center/Panel/VBox/JoinRow
@@ -23,32 +22,23 @@ func _ready() -> void:
 	NetworkManager.connection_failed.connect(_on_connection_failed)
 	status_label.text = ""
 	cancel_button.visible = false
-	name_input.text = GameSettings.player_name
-
-
-func _save_player_name() -> void:
-	var pname := name_input.text.strip_edges()
-	if pname.is_empty():
-		pname = "Player"
-	GameSettings.player_name = pname
 
 
 func _on_play_pressed() -> void:
-	_save_player_name()
 	SceneRouter.go_to_match()
 
 
 func _on_host_pressed() -> void:
-	_save_player_name()
 	var error := NetworkManager.host_game()
 	if error != OK:
 		status_label.text = "Host başlatılamadı!"
 		return
+	# Host hemen maça girer, tek başına oynar
+	# IP bilgisini match sahnesinde gösterebilir
 	SceneRouter.go_to_match({"online": true})
 
 
 func _on_join_pressed() -> void:
-	_save_player_name()
 	join_row.visible = true
 	ip_input.grab_focus()
 
@@ -68,6 +58,7 @@ func _on_ip_submitted(ip_text: String) -> void:
 
 
 func _on_connection_established() -> void:
+	# Client bağlandığında maça gir
 	if not NetworkManager.is_host():
 		SceneRouter.go_to_match({"online": true})
 

@@ -5,11 +5,7 @@ signal kick_attempted(player: HexPlayer)
 
 @export var player_id := 1
 @export var team_id := GameEnums.TeamId.RED
-@export var display_name := "P1":
-	set(value):
-		display_name = value
-		if is_node_ready():
-			_update_name_label()
+@export var display_name := "P1"
 @export var move_speed := 144.0
 @export var acceleration := 540.0
 @export var deceleration := 340.0
@@ -44,8 +40,6 @@ func _ready() -> void:
 	safe_margin = 0.02
 	add_to_group("players")
 	_input_profile = InputProfiles.get_profile(player_id)
-	if _input_profile == null or _input_profile.is_empty():
-		_input_profile = InputProfiles.get_profile(1)
 	spawn_position = position
 	if team_id == GameEnums.TeamId.BLUE:
 		facing_direction = Vector2.LEFT
@@ -70,16 +64,6 @@ func _physics_process(delta: float) -> void:
 		var input_direction := _get_effective_input()
 		if input_direction.length_squared() > 0.0:
 			facing_direction = input_direction.normalized()
-		# Kick check BEFORE movement so ball isn't pushed away first
-		var kick_pressed := false
-		if _is_local_player():
-			kick_pressed = Input.is_action_just_pressed(_get_local_profile()["kick"])
-		else:
-			kick_pressed = _remote_kick_requested
-			_remote_kick_requested = false
-		if kick_pressed:
-			_trigger_kick_flash()
-			_attempt_kick(input_direction)
 		velocity = VelocityMotor2D.update_velocity(
 			velocity,
 			input_direction,
@@ -91,6 +75,15 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		_resolve_player_overlaps()
 		_constrain_to_pitch()
+		var kick_pressed := false
+		if _is_local_player():
+			kick_pressed = Input.is_action_just_pressed(_get_local_profile()["kick"])
+		else:
+			kick_pressed = _remote_kick_requested
+			_remote_kick_requested = false
+		if kick_pressed:
+			_trigger_kick_flash()
+			_attempt_kick(input_direction)
 	else:
 		velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
 		if velocity.length_squared() > 0.001:
@@ -131,8 +124,12 @@ func get_team_color() -> Color:
 
 func _is_local_player() -> bool:
 	if not NetworkManager.is_online:
-		return player_id == 1 or player_id == 2
-	return multiplayer.get_unique_id() == player_id
+		return true
+	if NetworkManager.is_host() and player_id == 1:
+		return true
+	if not NetworkManager.is_host() and player_id == 2:
+		return true
+	return false
 
 
 func _get_effective_input() -> Vector2:
@@ -171,8 +168,6 @@ func _get_local_profile() -> Dictionary:
 
 @rpc("any_peer", "unreliable", "call_remote")
 func _rpc_send_input(dir_x: float, dir_y: float, kick: bool) -> void:
-	if multiplayer.get_remote_sender_id() != player_id:
-		return
 	_remote_input_direction = Vector2(dir_x, dir_y)
 	if kick:
 		_remote_kick_requested = true

@@ -49,7 +49,6 @@ const INPUT_BINDINGS := {
 }
 
 var debug_overlay_enabled := true
-var player_name := "Player"
 
 
 func _ready() -> void:

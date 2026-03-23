@@ -29,7 +29,7 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="Panel" type="Panel" parent="Center"]
-custom_minimum_size = Vector2(560, 560)
+custom_minimum_size = Vector2(560, 520)
 layout_mode = 2
 
 [node name="VBox" type="VBoxContainer" parent="Center/Panel"]
@@ -40,9 +40,9 @@ anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 offset_left = -220.0
-offset_top = -240.0
+offset_top = -210.0
 offset_right = 220.0
-offset_bottom = 240.0
+offset_bottom = 210.0
 theme_override_constants/separation = 14
 alignment = 1
 
@@ -68,12 +68,6 @@ Pause: ESC"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 18
 theme_override_colors/font_color = Color(0.913725, 0.94902, 0.972549, 1)
-
-[node name="NameInput" type="LineEdit" parent="Center/Panel/VBox"]
-layout_mode = 2
-placeholder_text = "Enter Player Name"
-theme_override_font_sizes/font_size = 20
-alignment = 1
 
 [node name="PlayButton" type="Button" parent="Center/Panel/VBox"]
 layout_mode = 2
