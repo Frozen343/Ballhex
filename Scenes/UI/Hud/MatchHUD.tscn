@@ -91,3 +91,62 @@ offset_bottom = -18.0
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 16
 theme_override_colors/font_color = Color(0.862745, 0.901961, 0.92549, 0.88)
+
+[node name="LobbyPanel" type="Panel" parent="."]
+layout_mode = 1
+offset_left = 24.0
+offset_top = 118.0
+offset_right = 320.0
+offset_bottom = 370.0
+
+[node name="Margin" type="MarginContainer" parent="LobbyPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 14
+
+[node name="VBox" type="VBoxContainer" parent="LobbyPanel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="LobbyTitle" type="Label" parent="LobbyPanel/Margin/VBox"]
+layout_mode = 2
+text = "Waiting Room"
+theme_override_font_sizes/font_size = 26
+
+[node name="LobbyStatus" type="Label" parent="LobbyPanel/Margin/VBox"]
+layout_mode = 2
+text = "Lobby"
+theme_override_font_sizes/font_size = 16
+
+[node name="LobbyList" type="ItemList" parent="LobbyPanel/Margin/VBox"]
+custom_minimum_size = Vector2(0, 130)
+layout_mode = 2
+select_mode = 0
+allow_reselect = true
+theme_override_font_sizes/font_size = 17
+
+[node name="Buttons" type="HBoxContainer" parent="LobbyPanel/Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="AssignRedButton" type="Button" parent="LobbyPanel/Margin/VBox/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Send Red"
+
+[node name="AssignBlueButton" type="Button" parent="LobbyPanel/Margin/VBox/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Send Blue"
+
+[node name="BenchButton" type="Button" parent="LobbyPanel/Margin/VBox/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Bench"

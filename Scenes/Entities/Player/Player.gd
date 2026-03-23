@@ -6,9 +6,10 @@ signal kick_attempted(player: HexPlayer)
 @export var player_id := 1
 @export var team_id := GameEnums.TeamId.RED
 @export var display_name := "P1"
-@export var move_speed := 144.0
-@export var acceleration := 540.0
+@export var move_speed := 156.0
+@export var acceleration := 580.0
 @export var deceleration := 340.0
+@export var facing_turn_speed := 12.0
 @export var kick_strength := 420.0
 @export var kick_contact_margin := 6.0
 @export var body_push_strength := 60.0
@@ -25,9 +26,11 @@ signal kick_attempted(player: HexPlayer)
 var input_enabled := false
 var spawn_position := Vector2.ZERO
 var facing_direction := Vector2.RIGHT
+var controller_peer_id := 1
 var _input_profile: Dictionary = {}
 var _ball: MatchBall
 var _kick_flash_strength := 0.0
+var _field_active := true
 
 # Network
 var _remote_input_direction := Vector2.ZERO
@@ -40,6 +43,7 @@ func _ready() -> void:
 	safe_margin = 0.02
 	add_to_group("players")
 	_input_profile = InputProfiles.get_profile(player_id)
+	controller_peer_id = player_id
 	spawn_position = position
 	if team_id == GameEnums.TeamId.BLUE:
 		facing_direction = Vector2.LEFT
@@ -49,7 +53,10 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	# Client tarafında fizik çalıştırma — state host'tan gelecek
+	if not _field_active:
+		return
+
+	# Client-side online physics is host authoritative.
 	if NetworkManager.is_online and not NetworkManager.is_host():
 		_send_local_input_to_host()
 		_kick_flash_strength = move_toward(_kick_flash_strength, 0.0, delta * 4.5)
@@ -60,10 +67,11 @@ func _physics_process(delta: float) -> void:
 	var previous_facing := facing_direction
 	var previous_flash := _kick_flash_strength
 	_kick_flash_strength = move_toward(_kick_flash_strength, 0.0, delta * 4.5)
+
 	if input_enabled:
 		var input_direction := _get_effective_input()
 		if input_direction.length_squared() > 0.0:
-			facing_direction = input_direction.normalized()
+			_update_facing_direction(input_direction, delta)
 		velocity = VelocityMotor2D.update_velocity(
 			velocity,
 			input_direction,
@@ -90,6 +98,7 @@ func _physics_process(delta: float) -> void:
 			move_and_slide()
 			_resolve_player_overlaps()
 			_constrain_to_pitch()
+
 	if previous_facing != facing_direction or absf(previous_flash - _kick_flash_strength) > 0.001:
 		needs_redraw = true
 	if needs_redraw:
@@ -101,7 +110,7 @@ func assign_ball(ball: MatchBall) -> void:
 
 
 func set_input_enabled(value: bool) -> void:
-	input_enabled = value
+	input_enabled = value and _field_active
 	if not input_enabled:
 		velocity = Vector2.ZERO
 
@@ -122,21 +131,41 @@ func get_team_color() -> Color:
 	return Helpers.team_color(team_id)
 
 
+func set_controller_peer_id(value: int) -> void:
+	controller_peer_id = value
+
+
+func set_display_name(value: String) -> void:
+	display_name = value
+	if is_node_ready():
+		_update_name_label()
+
+
+func set_field_active(value: bool) -> void:
+	_field_active = value
+	visible = value
+	collision_shape.disabled = not value
+	if not value:
+		input_enabled = false
+		velocity = Vector2.ZERO
+		_remote_input_direction = Vector2.ZERO
+		_remote_kick_requested = false
+
+
+func is_field_active() -> bool:
+	return _field_active
+
+
 func _is_local_player() -> bool:
 	if not NetworkManager.is_online:
 		return true
-	if NetworkManager.is_host() and player_id == 1:
-		return true
-	if not NetworkManager.is_host() and player_id == 2:
-		return true
-	return false
+	return controller_peer_id == NetworkManager.get_local_peer_id()
 
 
 func _get_effective_input() -> Vector2:
 	if _is_local_player():
 		return _get_local_input()
-	else:
-		return _remote_input_direction
+	return _remote_input_direction
 
 
 func _get_local_input() -> Vector2:
@@ -160,7 +189,6 @@ func _send_local_input_to_host() -> void:
 
 
 func _get_local_profile() -> Dictionary:
-	# Online modda her oyuncu kendi bilgisayarında WASD kullanır
 	if NetworkManager.is_online:
 		return InputProfiles.get_profile(1)
 	return _input_profile
@@ -181,16 +209,30 @@ func build_net_state() -> Dictionary:
 		"vy": velocity.y,
 		"fx": facing_direction.x,
 		"fy": facing_direction.y,
-		"kf": _kick_flash_strength
+		"kf": _kick_flash_strength,
+		"active": _field_active,
+		"owner": controller_peer_id,
+		"name": display_name
 	}
 
 
 func apply_net_state(state: Dictionary) -> void:
+	set_field_active(state.get("active", true))
 	position = Vector2(state["px"], state["py"])
 	velocity = Vector2(state["vx"], state["vy"])
 	facing_direction = Vector2(state["fx"], state["fy"])
 	_kick_flash_strength = state["kf"]
+	controller_peer_id = int(state.get("owner", controller_peer_id))
+	set_display_name(str(state.get("name", display_name)))
 	queue_redraw()
+
+
+func _update_facing_direction(input_direction: Vector2, delta: float) -> void:
+	var target_direction := input_direction.normalized()
+	var current_angle := facing_direction.angle()
+	var target_angle := target_direction.angle()
+	var blend := clampf(delta * facing_turn_speed, 0.0, 1.0)
+	facing_direction = Vector2.RIGHT.rotated(lerp_angle(current_angle, target_angle, blend))
 
 
 func _attempt_kick(input_direction: Vector2) -> void:
@@ -238,6 +280,9 @@ func _update_collision_shape() -> void:
 
 
 func _draw() -> void:
+	if not _field_active:
+		return
+
 	var team_color := get_team_color()
 	var deep_color := GameSettings.COLOR_RED_TEAM_DEEP if team_id == GameEnums.TeamId.RED else GameSettings.COLOR_BLUE_TEAM_DEEP
 	draw_circle(Vector2(0.0, 4.0), body_radius - 2.0, Color(0.0, 0.0, 0.0, 0.08))
@@ -277,6 +322,8 @@ func _resolve_player_overlaps() -> void:
 		var other := node as HexPlayer
 		if other == null or other == self:
 			continue
+		if not other.is_field_active():
+			continue
 		if player_id > other.player_id:
 			continue
 
@@ -292,33 +339,26 @@ func _resolve_player_overlaps() -> void:
 		elif other.facing_direction.length_squared() > 0.01:
 			normal = other.facing_direction.normalized()
 
-		# Pozisyon düzeltmesi — eşit olarak ayır
 		var correction := (minimum_distance - distance) * 0.5
 		position -= normal * correction
 		other.position += normal * correction
 
-		# Her iki oyuncunun normal eksenindeki hızını hesapla
 		var self_along := velocity.dot(normal)
 		var other_along := other.velocity.dot(normal)
-
-		# İki oyuncu da birbirine doğru gidiyorsa → eşit durdurma
 		var self_pushing := self_along > 0.0
 		var other_pushing := other_along < 0.0
 
 		if self_pushing and other_pushing:
-			# Karşılıklı itme: ikisini de normal ekseninde durdur
 			velocity -= normal * self_along
 			other.velocity -= normal * other_along
 		elif self_pushing:
-			# Sadece self itiyor → kuvvet transferi
-			var transfer := self_along * player_push_transfer
-			velocity -= normal * transfer * 0.5
-			other.velocity += normal * transfer * 0.5
+			var transfer_self := self_along * player_push_transfer
+			velocity -= normal * transfer_self * 0.5
+			other.velocity += normal * transfer_self * 0.5
 		elif other_pushing:
-			# Sadece other itiyor → kuvvet transferi
-			var transfer := absf(other_along) * other.player_push_transfer
-			other.velocity -= normal * (-transfer * 0.5)
-			velocity -= normal * transfer * 0.5
+			var transfer_other := absf(other_along) * other.player_push_transfer
+			other.velocity -= normal * (-transfer_other * 0.5)
+			velocity -= normal * transfer_other * 0.5
 
 
 func _constrain_to_pitch() -> void:

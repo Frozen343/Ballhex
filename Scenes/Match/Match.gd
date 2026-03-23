@@ -62,11 +62,18 @@ func _connect_ui() -> void:
 	match_manager.pause_changed.connect(_on_pause_changed)
 	match_manager.match_finished.connect(_on_match_finished)
 	match_manager.state_updated.connect(debug_overlay.set_state_name)
+	match_manager.lobby_state_changed.connect(match_hud.update_lobby_room)
 
 	pause_menu.resume_requested.connect(match_manager.toggle_pause)
 	pause_menu.menu_requested.connect(_return_to_menu)
 	end_match_panel.restart_requested.connect(match_manager.restart_match)
 	end_match_panel.menu_requested.connect(_return_to_menu)
+	match_hud.assign_red_requested.connect(match_manager.assign_peer_to_red)
+	match_hud.assign_blue_requested.connect(match_manager.assign_peer_to_blue)
+	match_hud.bench_requested.connect(match_manager.assign_peer_to_waiting)
+
+	if not NetworkManager.is_online:
+		match_hud.hide_lobby_room()
 
 
 func _center_world() -> void:

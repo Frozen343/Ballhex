@@ -13,6 +13,7 @@ signal matchmaking_failed(message: String)
 const DEFAULT_PORT := 7000
 const MAX_CLIENTS := 1
 const DEFAULT_LOBBY_NAME := "Hexball Lobby"
+const DEFAULT_LOBBY_CAPACITY := 4
 const SERVICE_ORIGIN_OVERRIDE := ""
 const WEB_LOBBIES_PATH := "/api/lobbies"
 const WEB_SIGNAL_PATH := "/ws"
@@ -24,21 +25,28 @@ const WEB_STUN_SERVERS := [
 var is_online := false
 var is_host_player := false
 var remote_peer_id := -1
+var local_peer_id := 1
+var lobby_max_players := 2
 var available_lobbies: Array = []
 var active_lobby_id := ""
 var active_lobby_name := ""
+var connected_peer_ids: Array[int] = []
 
 var _peer: ENetMultiplayerPeer
 var _webrtc_peer: WebRTCMultiplayerPeer
-var _rtc_connection: WebRTCPeerConnection
+var _rtc_connections: Dictionary = {}
 var _signaling_socket: WebSocketPeer
 var _signaling_was_open := false
 var _suppress_socket_close := false
-var _local_web_peer_id := 1
-var _pending_ice_candidates: Array = []
+var _pending_ice_candidates: Dictionary = {}
 
 
 func _process(_delta: float) -> void:
+	for connection in _rtc_connections.values():
+		var rtc_connection := connection as WebRTCPeerConnection
+		if rtc_connection != null:
+			rtc_connection.poll()
+
 	if _signaling_socket == null:
 		return
 
@@ -72,9 +80,21 @@ func uses_web_lobbies() -> bool:
 	return OS.has_feature("web")
 
 
-func host_game(port: int = DEFAULT_PORT, lobby_name: String = "") -> Error:
+func get_local_peer_id() -> int:
+	return local_peer_id
+
+
+func get_connected_peer_ids() -> Array[int]:
+	return connected_peer_ids.duplicate()
+
+
+func get_lobby_capacity() -> int:
+	return max(2, lobby_max_players)
+
+
+func host_game(port: int = DEFAULT_PORT, lobby_name: String = "", max_players: int = DEFAULT_LOBBY_CAPACITY) -> Error:
 	if uses_web_lobbies():
-		_start_web_host_flow(lobby_name)
+		_start_web_host_flow(lobby_name, max_players)
 		return OK
 
 	_cleanup()
@@ -86,6 +106,8 @@ func host_game(port: int = DEFAULT_PORT, lobby_name: String = "") -> Error:
 	multiplayer.multiplayer_peer = _peer
 	is_online = true
 	is_host_player = true
+	local_peer_id = 1
+	lobby_max_players = 2
 	_bind_signals()
 	print("NetworkManager: Hosting on port %d" % port)
 	return OK
@@ -108,6 +130,8 @@ func join_game(address: String, port: int = DEFAULT_PORT) -> Error:
 	multiplayer.multiplayer_peer = _peer
 	is_online = true
 	is_host_player = false
+	local_peer_id = 2
+	lobby_max_players = 2
 	_bind_signals()
 	print("NetworkManager: Joining %s:%d" % [address, port])
 	return OK
@@ -141,8 +165,10 @@ func _bind_signals() -> void:
 		multiplayer.server_disconnected.connect(_on_server_disconnected)
 
 
-func _start_web_host_flow(lobby_name: String) -> void:
+func _start_web_host_flow(lobby_name: String, max_players: int) -> void:
 	_cleanup()
+	local_peer_id = 1
+	lobby_max_players = max(2, max_players)
 	var error := _create_web_host_peer()
 	if error != OK:
 		_fail_matchmaking("Web host baslatilamadi.", true)
@@ -150,13 +176,13 @@ func _start_web_host_flow(lobby_name: String) -> void:
 
 	active_lobby_name = _sanitize_lobby_name(lobby_name)
 	matchmaking_status_changed.emit("Lobi olusturuluyor...")
-	_host_lobby_async.call_deferred(active_lobby_name)
+	_host_lobby_async.call_deferred(active_lobby_name, lobby_max_players)
 
 
 func _start_web_join_flow(lobby_id: String) -> void:
 	_cleanup()
-	_local_web_peer_id = randi_range(2, 2147483647)
-	var error := _create_web_client_peer(_local_web_peer_id)
+	local_peer_id = randi_range(2, 2147483647)
+	var error := _create_web_client_peer(local_peer_id)
 	if error != OK:
 		_fail_matchmaking("Web client baslatilamadi.", true)
 		return
@@ -164,7 +190,7 @@ func _start_web_join_flow(lobby_id: String) -> void:
 	active_lobby_id = lobby_id
 	active_lobby_name = ""
 	matchmaking_status_changed.emit("Lobiye baglaniliyor...")
-	var signaling_error := _connect_signaling(_build_signaling_url(lobby_id, false, _local_web_peer_id))
+	var signaling_error := _connect_signaling(_build_signaling_url(lobby_id, false, local_peer_id))
 	if signaling_error != OK:
 		_fail_matchmaking("Signaling sunucusuna baglanilamadi.", true)
 
@@ -193,11 +219,14 @@ func _create_web_client_peer(peer_id: int) -> Error:
 	return OK
 
 
-func _host_lobby_async(lobby_name: String) -> void:
+func _host_lobby_async(lobby_name: String, max_players: int) -> void:
 	var response := await _request_json(
 		HTTPClient.METHOD_POST,
 		_build_http_url(WEB_LOBBIES_PATH),
-		{"name": lobby_name}
+		{
+			"name": lobby_name,
+			"maxPlayers": max_players
+		}
 	)
 	if not response.get("ok", false):
 		_fail_matchmaking("Lobi olusturulamadi.", true)
@@ -206,6 +235,7 @@ func _host_lobby_async(lobby_name: String) -> void:
 	var data: Dictionary = response.get("data", {})
 	active_lobby_id = str(data.get("id", ""))
 	active_lobby_name = str(data.get("name", lobby_name))
+	lobby_max_players = int(data.get("maxPlayers", max_players))
 	if active_lobby_id.is_empty():
 		_fail_matchmaking("Lobby kimligi alinamadi.", true)
 		return
@@ -319,13 +349,17 @@ func _handle_signaling_message(message: Dictionary) -> void:
 
 	match message_type:
 		"host_ready":
+			var lobby_info: Dictionary = message.get("lobby", {})
+			lobby_max_players = int(lobby_info.get("maxPlayers", lobby_max_players))
 			matchmaking_status_changed.emit("Lobby yayinlandi")
 		"guest_ready":
+			var ready_lobby: Dictionary = message.get("lobby", {})
+			lobby_max_players = int(ready_lobby.get("maxPlayers", lobby_max_players))
 			matchmaking_status_changed.emit("Host baglantisi bekleniyor...")
 		"guest_joined":
 			_on_guest_joined_for_webrtc(int(message.get("peerId", 2)))
 		"guest_left":
-			_on_guest_left()
+			_on_guest_left(int(message.get("peerId", -1)))
 		"lobby_closed":
 			_on_server_disconnected()
 		"error":
@@ -344,7 +378,12 @@ func _on_guest_joined_for_webrtc(peer_id: int) -> void:
 		_fail_matchmaking("WebRTC baglantisi hazirlanamadi.", true)
 		return
 
-	var offer_error := _rtc_connection.create_offer()
+	var rtc_connection := _rtc_connections.get(peer_id) as WebRTCPeerConnection
+	if rtc_connection == null:
+		_fail_matchmaking("WebRTC oturumu bulunamadi.", true)
+		return
+
+	var offer_error: Error = rtc_connection.create_offer()
 	if offer_error != OK:
 		_fail_matchmaking("WebRTC offer olusturulamadi.", true)
 		return
@@ -354,67 +393,84 @@ func _on_guest_joined_for_webrtc(peer_id: int) -> void:
 
 func _handle_webrtc_signal(message: Dictionary) -> void:
 	var kind := str(message.get("kind", ""))
+	var peer_id := int(message.get("peerId", 1))
 
 	match kind:
 		"offer":
-			_on_webrtc_offer(message)
+			_on_webrtc_offer(peer_id, message)
 		"answer":
-			_on_webrtc_answer(message)
+			_on_webrtc_answer(peer_id, message)
 		"ice":
-			_on_webrtc_ice_candidate(message)
+			_on_webrtc_ice_candidate(peer_id, message)
 
 
-func _on_webrtc_offer(message: Dictionary) -> void:
-	var error := _ensure_rtc_connection(1)
+func _on_webrtc_offer(peer_id: int, message: Dictionary) -> void:
+	var error := _ensure_rtc_connection(peer_id)
 	if error != OK:
 		_fail_matchmaking("WebRTC istemci baglantisi hazirlanamadi.", true)
 		return
 
+	var rtc_connection := _rtc_connections.get(peer_id) as WebRTCPeerConnection
+	if rtc_connection == null:
+		_fail_matchmaking("WebRTC baglantisi bulunamadi.", true)
+		return
+
 	var sdp_type := str(message.get("sdpType", "offer"))
 	var sdp := str(message.get("sdp", ""))
-	var remote_error := _rtc_connection.set_remote_description(sdp_type, sdp)
+	var remote_error := rtc_connection.set_remote_description(sdp_type, sdp)
 	if remote_error != OK:
 		_fail_matchmaking("Host teklifi uygulanamadi.", true)
 		return
-	_flush_pending_ice_candidates()
+
+	_flush_pending_ice_candidates(peer_id)
+	var answer_error: Error = rtc_connection.create_answer()
+	if answer_error != OK:
+		_fail_matchmaking("WebRTC cevap olusturulamadi.", true)
+		return
 	matchmaking_status_changed.emit("Host ile el sikisiliyor...")
 
 
-func _on_webrtc_answer(message: Dictionary) -> void:
-	if _rtc_connection == null:
+func _on_webrtc_answer(peer_id: int, message: Dictionary) -> void:
+	var rtc_connection := _rtc_connections.get(peer_id) as WebRTCPeerConnection
+	if rtc_connection == null:
 		_fail_matchmaking("WebRTC answer icin aktif baglanti yok.", true)
 		return
 
 	var sdp_type := str(message.get("sdpType", "answer"))
 	var sdp := str(message.get("sdp", ""))
-	var remote_error := _rtc_connection.set_remote_description(sdp_type, sdp)
+	var remote_error := rtc_connection.set_remote_description(sdp_type, sdp)
 	if remote_error != OK:
 		_fail_matchmaking("WebRTC cevap uygulanamadi.", true)
 		return
-	_flush_pending_ice_candidates()
+
+	_flush_pending_ice_candidates(peer_id)
 	matchmaking_status_changed.emit("Oyuncu baglantisi tamamlaniyor...")
 
 
-func _on_webrtc_ice_candidate(message: Dictionary) -> void:
+func _on_webrtc_ice_candidate(peer_id: int, message: Dictionary) -> void:
 	var candidate := {
 		"mid": str(message.get("mid", "")),
 		"index": int(message.get("index", 0)),
 		"sdp": str(message.get("sdp", ""))
 	}
 
-	if _rtc_connection == null:
-		_pending_ice_candidates.append(candidate)
+	if not _rtc_connections.has(peer_id):
+		if not _pending_ice_candidates.has(peer_id):
+			_pending_ice_candidates[peer_id] = []
+		var queue: Array = _pending_ice_candidates[peer_id]
+		queue.append(candidate)
+		_pending_ice_candidates[peer_id] = queue
 		return
 
-	_apply_ice_candidate(candidate)
+	_apply_ice_candidate(peer_id, candidate)
 
 
 func _ensure_rtc_connection(peer_id: int) -> Error:
-	if _rtc_connection != null:
+	if _rtc_connections.has(peer_id):
 		return OK
 
-	_rtc_connection = WebRTCPeerConnection.new()
-	var initialize_error := _rtc_connection.initialize({
+	var rtc_connection := WebRTCPeerConnection.new()
+	var initialize_error := rtc_connection.initialize({
 		"iceServers": [
 			{
 				"urls": WEB_STUN_SERVERS
@@ -424,16 +480,20 @@ func _ensure_rtc_connection(peer_id: int) -> Error:
 	if initialize_error != OK:
 		return initialize_error
 
-	_rtc_connection.session_description_created.connect(_on_session_description_created.bind(peer_id))
-	_rtc_connection.ice_candidate_created.connect(_on_ice_candidate_created.bind(peer_id))
-	return _webrtc_peer.add_peer(_rtc_connection, peer_id)
+	rtc_connection.session_description_created.connect(_on_session_description_created.bind(peer_id))
+	rtc_connection.ice_candidate_created.connect(_on_ice_candidate_created.bind(peer_id))
+	_rtc_connections[peer_id] = rtc_connection
+	if not _pending_ice_candidates.has(peer_id):
+		_pending_ice_candidates[peer_id] = []
+	return _webrtc_peer.add_peer(rtc_connection, peer_id)
 
 
 func _on_session_description_created(sdp_type: String, sdp: String, peer_id: int) -> void:
-	if _rtc_connection == null or _signaling_socket == null:
+	var rtc_connection := _rtc_connections.get(peer_id) as WebRTCPeerConnection
+	if rtc_connection == null or _signaling_socket == null:
 		return
 
-	_rtc_connection.set_local_description(sdp_type, sdp)
+	rtc_connection.set_local_description(sdp_type, sdp)
 	_send_signaling_message({
 		"type": "signal",
 		"kind": sdp_type,
@@ -462,32 +522,48 @@ func _send_signaling_message(message: Dictionary) -> void:
 	_signaling_socket.send_text(JSON.stringify(message))
 
 
-func _apply_ice_candidate(candidate: Dictionary) -> void:
-	if _rtc_connection == null:
+func _apply_ice_candidate(peer_id: int, candidate: Dictionary) -> void:
+	var rtc_connection := _rtc_connections.get(peer_id) as WebRTCPeerConnection
+	if rtc_connection == null:
 		return
-	_rtc_connection.add_ice_candidate(
+	rtc_connection.add_ice_candidate(
 		str(candidate.get("mid", "")),
 		int(candidate.get("index", 0)),
 		str(candidate.get("sdp", ""))
 	)
 
 
-func _flush_pending_ice_candidates() -> void:
-	if _rtc_connection == null:
+func _flush_pending_ice_candidates(peer_id: int) -> void:
+	if not _pending_ice_candidates.has(peer_id):
 		return
-	for candidate in _pending_ice_candidates:
-		_apply_ice_candidate(candidate)
-	_pending_ice_candidates.clear()
+	var queue: Array = _pending_ice_candidates.get(peer_id, [])
+	for candidate in queue:
+		_apply_ice_candidate(peer_id, candidate)
+	_pending_ice_candidates[peer_id] = []
 
 
-func _on_guest_left() -> void:
-	if _webrtc_peer != null and remote_peer_id >= 0:
-		_webrtc_peer.remove_peer(remote_peer_id)
-	if _rtc_connection != null:
-		_rtc_connection.close()
-		_rtc_connection = null
-	remote_peer_id = -1
+func _on_guest_left(peer_id: int) -> void:
+	_remove_rtc_peer(peer_id)
 	matchmaking_status_changed.emit("Lobby acik, yeni oyuncu bekleniyor...")
+
+
+func _remove_rtc_peer(peer_id: int) -> void:
+	if peer_id < 0:
+		return
+	if not _rtc_connections.has(peer_id) and not connected_peer_ids.has(peer_id):
+		return
+
+	if _webrtc_peer != null and (_rtc_connections.has(peer_id) or connected_peer_ids.has(peer_id)):
+		_webrtc_peer.remove_peer(peer_id)
+
+	var rtc_connection := _rtc_connections.get(peer_id) as WebRTCPeerConnection
+	if rtc_connection != null:
+		rtc_connection.close()
+	_rtc_connections.erase(peer_id)
+	_pending_ice_candidates.erase(peer_id)
+	connected_peer_ids.erase(peer_id)
+	if remote_peer_id == peer_id:
+		remote_peer_id = connected_peer_ids[0] if not connected_peer_ids.is_empty() else -1
 
 
 func _sanitize_lobby_name(lobby_name: String) -> String:
@@ -535,7 +611,11 @@ func _fail_matchmaking(message: String, emit_connection_failure: bool) -> void:
 
 
 func _on_peer_connected(id: int) -> void:
-	remote_peer_id = id
+	if not connected_peer_ids.has(id):
+		connected_peer_ids.append(id)
+	connected_peer_ids.sort()
+	if remote_peer_id < 0:
+		remote_peer_id = id
 	print("NetworkManager: Peer connected - id %d" % id)
 	peer_connected.emit(id)
 	if is_host_player:
@@ -544,13 +624,15 @@ func _on_peer_connected(id: int) -> void:
 
 func _on_peer_disconnected(id: int) -> void:
 	print("NetworkManager: Peer disconnected - id %d" % id)
+	_remove_rtc_peer(id)
 	peer_disconnected.emit(id)
-	remote_peer_id = -1
 
 
 func _on_connected_to_server() -> void:
-	if remote_peer_id < 0:
-		remote_peer_id = 1
+	if not connected_peer_ids.has(1):
+		connected_peer_ids.append(1)
+	connected_peer_ids.sort()
+	remote_peer_id = 1
 	print("NetworkManager: Connected to server")
 	connection_established.emit()
 
@@ -570,9 +652,12 @@ func _on_server_disconnected() -> void:
 func _cleanup() -> void:
 	_close_signaling_socket()
 
-	if _rtc_connection != null:
-		_rtc_connection.close()
-		_rtc_connection = null
+	for peer_id in _rtc_connections.keys():
+		var rtc_connection := _rtc_connections[peer_id] as WebRTCPeerConnection
+		if rtc_connection != null:
+			rtc_connection.close()
+	_rtc_connections.clear()
+	_pending_ice_candidates.clear()
 
 	if _webrtc_peer != null:
 		_webrtc_peer.close()
@@ -598,10 +683,11 @@ func _cleanup() -> void:
 	is_online = false
 	is_host_player = false
 	remote_peer_id = -1
+	local_peer_id = 1
+	lobby_max_players = 2
 	active_lobby_id = ""
 	active_lobby_name = ""
-	_local_web_peer_id = 1
-	_pending_ice_candidates.clear()
+	connected_peer_ids.clear()
 
 
 func _close_signaling_socket() -> void:

@@ -9,7 +9,7 @@ const PORT = Number(process.env.PORT || 3000);
 const WEB_DIR = path.join(__dirname, "web");
 const EMPTY_CLOSE_CODE = 1011;
 const HOST_GONE_CLOSE_CODE = 4000;
-const GUEST_BUSY_CLOSE_CODE = 4001;
+const LOBBY_FULL_CLOSE_CODE = 4001;
 const LOBBY_NOT_FOUND_CLOSE_CODE = 4004;
 const LOBBY_STALE_TIMEOUT_MS = 2 * 60 * 1000;
 
@@ -41,28 +41,15 @@ app.post("/api/lobbies", (req, res) => {
   const lobby = {
     id,
     name: sanitizeLobbyName(req.body?.name),
+    maxPlayers: sanitizeMaxPlayers(req.body?.maxPlayers),
     createdAt: new Date().toISOString(),
     createdAtMs: Date.now(),
     hostSocket: null,
-    guestSocket: null,
-    guestPeerId: null
+    guestSockets: new Map()
   };
 
   lobbies.set(id, lobby);
   res.status(201).json(serializeLobby(lobby));
-});
-
-app.delete("/api/lobbies/:id", (req, res) => {
-  const lobby = lobbies.get(req.params.id);
-  if (!lobby) {
-    res.status(404).json({ error: "Lobby not found" });
-    return;
-  }
-
-  safelyCloseSocket(lobby.hostSocket, 1000, "Lobby closed");
-  safelyCloseSocket(lobby.guestSocket, 1000, "Lobby closed");
-  lobbies.delete(lobby.id);
-  res.status(204).end();
 });
 
 app.use(express.static(WEB_DIR));
@@ -78,11 +65,11 @@ server.on("upgrade", (request, socket, head) => {
   }
 
   wss.handleUpgrade(request, socket, head, (ws) => {
-    wss.emit("connection", ws, request, requestUrl);
+    wss.emit("connection", ws, requestUrl);
   });
 });
 
-wss.on("connection", (ws, _request, requestUrl) => {
+wss.on("connection", (ws, requestUrl) => {
   pruneStaleLobbies();
 
   const lobbyId = requestUrl.searchParams.get("lobbyId") || "";
@@ -99,7 +86,7 @@ wss.on("connection", (ws, _request, requestUrl) => {
   if (role === "host") {
     if (lobby.hostSocket) {
       sendJson(ws, { type: "error", message: "Lobby host already connected." });
-      ws.close(GUEST_BUSY_CLOSE_CODE, "Host already connected");
+      ws.close(LOBBY_FULL_CLOSE_CODE, "Host already connected");
       return;
     }
 
@@ -116,9 +103,9 @@ wss.on("connection", (ws, _request, requestUrl) => {
       return;
     }
 
-    if (lobby.guestSocket) {
+    if (lobby.guestSockets.size >= lobby.maxPlayers - 1) {
       sendJson(ws, { type: "error", message: "Lobby already full." });
-      ws.close(GUEST_BUSY_CLOSE_CODE, "Lobby already full");
+      ws.close(LOBBY_FULL_CLOSE_CODE, "Lobby already full");
       return;
     }
 
@@ -128,8 +115,7 @@ wss.on("connection", (ws, _request, requestUrl) => {
       return;
     }
 
-    lobby.guestSocket = ws;
-    lobby.guestPeerId = peerId;
+    lobby.guestSockets.set(peerId, ws);
     sendJson(ws, {
       type: "guest_ready",
       lobby: serializeLobby(lobby),
@@ -158,15 +144,18 @@ wss.on("connection", (ws, _request, requestUrl) => {
       return;
     }
 
+    const targetPeerId = Number(message.peerId || 0);
+
     if (role === "host") {
-      if (!lobby.guestSocket) {
+      const guestSocket = lobby.guestSockets.get(targetPeerId);
+      if (!guestSocket) {
         return;
       }
 
-      sendJson(lobby.guestSocket, {
+      sendJson(guestSocket, {
         type: "signal",
         kind: message.kind,
-        peerId: lobby.guestPeerId,
+        peerId: targetPeerId,
         sdpType: message.sdpType,
         sdp: message.sdp,
         mid: message.mid,
@@ -182,7 +171,7 @@ wss.on("connection", (ws, _request, requestUrl) => {
     sendJson(lobby.hostSocket, {
       type: "signal",
       kind: message.kind,
-      peerId: lobby.guestPeerId,
+      peerId,
       sdpType: message.sdpType,
       sdp: message.sdp,
       mid: message.mid,
@@ -192,18 +181,20 @@ wss.on("connection", (ws, _request, requestUrl) => {
 
   ws.on("close", () => {
     if (role === "host" && lobby.hostSocket === ws) {
-      if (lobby.guestSocket) {
-        sendJson(lobby.guestSocket, { type: "lobby_closed" });
-        safelyCloseSocket(lobby.guestSocket, 1000, "Host left");
+      for (const guestSocket of lobby.guestSockets.values()) {
+        sendJson(guestSocket, { type: "lobby_closed" });
+        safelyCloseSocket(guestSocket, 1000, "Host left");
       }
       lobbies.delete(lobby.id);
       return;
     }
 
-    if (role === "guest" && lobby.guestSocket === ws) {
-      lobby.guestSocket = null;
-      lobby.guestPeerId = null;
-      sendJson(lobby.hostSocket, { type: "guest_left" });
+    if (role === "guest" && lobby.guestSockets.has(peerId)) {
+      lobby.guestSockets.delete(peerId);
+      sendJson(lobby.hostSocket, {
+        type: "guest_left",
+        peerId
+      });
     }
   });
 });
@@ -221,6 +212,14 @@ function sanitizeLobbyName(name) {
   return text.slice(0, 32);
 }
 
+function sanitizeMaxPlayers(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 4;
+  }
+  return Math.max(2, Math.min(12, Math.floor(numeric)));
+}
+
 function randomTwoDigit() {
   return Math.floor(Math.random() * 90 + 10);
 }
@@ -230,20 +229,21 @@ function serializeLobby(lobby) {
     id: lobby.id,
     name: lobby.name,
     createdAt: lobby.createdAt,
-    playerCount: lobby.guestSocket ? 2 : 1
+    playerCount: 1 + lobby.guestSockets.size,
+    maxPlayers: lobby.maxPlayers
   };
 }
 
 function listJoinableLobbies() {
   return Array.from(lobbies.values())
-    .filter((lobby) => Boolean(lobby.hostSocket) && !lobby.guestSocket)
+    .filter((lobby) => Boolean(lobby.hostSocket) && lobby.guestSockets.size < lobby.maxPlayers - 1)
     .map(serializeLobby);
 }
 
 function pruneStaleLobbies() {
   const now = Date.now();
   for (const lobby of lobbies.values()) {
-    if (lobby.hostSocket || lobby.guestSocket) {
+    if (lobby.hostSocket || lobby.guestSockets.size > 0) {
       continue;
     }
 

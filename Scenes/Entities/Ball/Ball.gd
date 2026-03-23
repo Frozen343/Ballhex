@@ -3,7 +3,7 @@ class_name MatchBall
 
 @export var radius := GameSettings.BALL_RADIUS
 @export var max_speed := 550.0
-@export var drag := 190.0
+@export var drag := 72.0
 @export var wall_bounce := 0.64
 @export var player_hit_multiplier := 0.22
 @export var kick_impulse_multiplier := 1.08
@@ -112,6 +112,8 @@ func _move_with_bounce(delta: float) -> void:
 func _resolve_player_overlaps(delta: float) -> void:
 	for player in _tracked_players:
 		if player == null:
+			continue
+		if not player.is_field_active():
 			continue
 		var offset := position - player.position
 		var distance := offset.length()

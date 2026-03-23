@@ -10,6 +10,8 @@ class_name MainMenu
 @onready var join_row: HBoxContainer = $Center/Panel/VBox/JoinRow
 @onready var cancel_button: Button = $Center/Panel/VBox/CancelButton
 @onready var lobby_name_input: LineEdit = $Center/Panel/VBox/LobbyNameInput
+@onready var max_players_row: HBoxContainer = $Center/Panel/VBox/MaxPlayersRow
+@onready var max_players_input: SpinBox = $Center/Panel/VBox/MaxPlayersRow/MaxPlayersInput
 @onready var lobby_controls: HBoxContainer = $Center/Panel/VBox/LobbyControls
 @onready var refresh_button: Button = $Center/Panel/VBox/LobbyControls/RefreshButton
 @onready var lobby_list: ItemList = $Center/Panel/VBox/LobbyList
@@ -42,6 +44,7 @@ func _configure_online_ui() -> void:
 	var using_web_lobbies := NetworkManager.uses_web_lobbies()
 	join_row.visible = false
 	lobby_name_input.visible = using_web_lobbies
+	max_players_row.visible = using_web_lobbies
 	lobby_controls.visible = using_web_lobbies
 	lobby_list.visible = using_web_lobbies
 
@@ -62,7 +65,7 @@ func _on_host_pressed() -> void:
 		status_label.text = "Lobi olusturuluyor..."
 		_set_buttons_enabled(false)
 		cancel_button.visible = true
-		NetworkManager.host_game(NetworkManager.DEFAULT_PORT, lobby_name_input.text)
+		NetworkManager.host_game(NetworkManager.DEFAULT_PORT, lobby_name_input.text, int(max_players_input.value))
 		return
 
 	var error := NetworkManager.host_game()
@@ -89,6 +92,7 @@ func _on_join_pressed() -> void:
 		status_label.text = "Lobiye baglaniliyor..."
 		_set_buttons_enabled(false)
 		cancel_button.visible = true
+		NetworkManager.lobby_max_players = int(lobby.get("maxPlayers", 2))
 		NetworkManager.join_game(str(lobby.get("id", "")))
 		return
 
@@ -150,7 +154,8 @@ func _on_lobbies_updated(lobbies: Array) -> void:
 			continue
 		var lobby_name := str(lobby_data.get("name", "Lobby"))
 		var player_count := int(lobby_data.get("playerCount", 1))
-		lobby_list.add_item("%s (%d/2)" % [lobby_name, player_count])
+		var max_players := int(lobby_data.get("maxPlayers", 2))
+		lobby_list.add_item("%s (%d/%d)" % [lobby_name, player_count, max_players])
 
 	if _displayed_lobbies.is_empty():
 		status_label.text = "Aktif lobby yok."
@@ -188,6 +193,7 @@ func _set_buttons_enabled(enabled: bool) -> void:
 	quit_button.disabled = not enabled
 	refresh_button.disabled = not enabled
 	lobby_name_input.editable = enabled
+	max_players_input.editable = enabled
 
 
 func _exit_tree() -> void:

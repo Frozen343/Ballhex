@@ -6,3 +6,6 @@ res://Scenes/Match/Match.tscn
 res://Scenes/Menus/MainMenu.gd
 res://Scenes/Menus/MainMenu.tscn
 res://Scenes/Systems/MatchManager/MatchManager.gd
+res://Scenes/Entities/Ball/Ball.gd
+res://Scenes/UI/Hud/MatchHUD.gd
+res://Scenes/UI/Hud/MatchHUD.tscn
