@@ -1,0 +1,125 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scenes/Menus/MainMenu.gd" id="1"]
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0666667, 0.121569, 0.0901961, 1)
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="Panel" parent="Center"]
+custom_minimum_size = Vector2(560, 560)
+layout_mode = 2
+
+[node name="VBox" type="VBoxContainer" parent="Center/Panel"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -220.0
+offset_top = -240.0
+offset_right = 220.0
+offset_bottom = 240.0
+theme_override_constants/separation = 14
+alignment = 1
+
+[node name="Title" type="Label" parent="Center/Panel/VBox"]
+layout_mode = 2
+text = "HEXBALL"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 54
+theme_override_colors/font_color = Color(0.960784, 0.972549, 0.984314, 1)
+
+[node name="Subtitle" type="Label" parent="Center/Panel/VBox"]
+layout_mode = 2
+text = "Arcade football foundation in Godot"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(0.705882, 0.760784, 0.807843, 1)
+
+[node name="Controls" type="Label" parent="Center/Panel/VBox"]
+layout_mode = 2
+text = "P1: WASD + SPACE
+P2: ARROWS + .
+Pause: ESC"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.913725, 0.94902, 0.972549, 1)
+
+[node name="NameInput" type="LineEdit" parent="Center/Panel/VBox"]
+layout_mode = 2
+placeholder_text = "Enter Player Name"
+theme_override_font_sizes/font_size = 20
+alignment = 1
+
+[node name="PlayButton" type="Button" parent="Center/Panel/VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 48)
+text = "Local Match"
+
+[node name="HostButton" type="Button" parent="Center/Panel/VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 48)
+text = "Host Game"
+
+[node name="JoinButton" type="Button" parent="Center/Panel/VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 48)
+text = "Join Game"
+
+[node name="JoinRow" type="HBoxContainer" parent="Center/Panel/VBox"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="IpLabel" type="Label" parent="Center/Panel/VBox/JoinRow"]
+layout_mode = 2
+text = "IP:"
+theme_override_font_sizes/font_size = 18
+
+[node name="IpInput" type="LineEdit" parent="Center/Panel/VBox/JoinRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "127.0.0.1"
+theme_override_font_sizes/font_size = 18
+
+[node name="StatusLabel" type="Label" parent="Center/Panel/VBox"]
+layout_mode = 2
+text = ""
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.9, 0.95, 0.8, 1)
+
+[node name="CancelButton" type="Button" parent="Center/Panel/VBox"]
+visible = false
+layout_mode = 2
+custom_minimum_size = Vector2(0, 48)
+text = "Cancel"
+
+[node name="QuitButton" type="Button" parent="Center/Panel/VBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 48)
+text = "Quit"

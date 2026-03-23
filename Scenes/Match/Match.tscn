@@ -1,0 +1,66 @@
+[gd_scene load_steps=14 format=3]
+
+[ext_resource type="Script" path="res://Scenes/Match/Match.gd" id="1"]
+[ext_resource type="PackedScene" path="res://Scenes/Match/Pitch.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://Scenes/Entities/Player/Player.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://Scenes/Entities/Ball/Ball.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://Scenes/Entities/Goal/Goal.tscn" id="5"]
+[ext_resource type="Script" path="res://Scenes/Systems/StateMachine/MatchStateMachine.gd" id="6"]
+[ext_resource type="Script" path="res://Scenes/Systems/ResetSystem/ResetSystem.gd" id="7"]
+[ext_resource type="Script" path="res://Scenes/Systems/TimeSystem/TimeSystem.gd" id="8"]
+[ext_resource type="Script" path="res://Scenes/Systems/MatchManager/MatchManager.gd" id="9"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/Hud/MatchHUD.tscn" id="10"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/Hud/LobbyMenu.tscn" id="11"]
+[ext_resource type="PackedScene" path="res://Scenes/Menus/EndMatchPanel.tscn" id="12"]
+[ext_resource type="PackedScene" path="res://Scenes/Systems/Debug/DebugOverlay.tscn" id="13"]
+
+[node name="Match" type="Node"]
+script = ExtResource("1")
+
+[node name="World" type="Node2D" parent="."]
+
+[node name="Pitch" parent="World" instance=ExtResource("2")]
+
+[node name="Goals" type="Node2D" parent="World"]
+
+[node name="LeftGoal" parent="World/Goals" instance=ExtResource("5")]
+position = Vector2(-800, 0)
+defending_team = 0
+goal_id = "left_goal"
+is_left_goal = true
+
+[node name="RightGoal" parent="World/Goals" instance=ExtResource("5")]
+position = Vector2(800, 0)
+defending_team = 1
+goal_id = "right_goal"
+is_left_goal = false
+
+[node name="Entities" type="Node2D" parent="World"]
+
+[node name="Ball" parent="World/Entities" instance=ExtResource("4")]
+
+[node name="Managers" type="Node" parent="."]
+
+[node name="StateMachine" type="Node" parent="Managers"]
+script = ExtResource("6")
+
+[node name="ResetSystem" type="Node" parent="Managers"]
+script = ExtResource("7")
+
+[node name="TimeSystem" type="Node" parent="Managers"]
+script = ExtResource("8")
+
+[node name="MatchManager" type="Node" parent="Managers"]
+script = ExtResource("9")
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="MatchHUD" parent="UI" instance=ExtResource("10")]
+
+[node name="LobbyMenu" parent="UI" instance=ExtResource("11")]
+
+[node name="EndMatchPanel" parent="UI" instance=ExtResource("12")]
+
+[node name="Debug" type="CanvasLayer" parent="."]
+
+[node name="DebugOverlay" parent="Debug" instance=ExtResource("13")]

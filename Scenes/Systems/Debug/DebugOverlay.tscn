@@ -1,0 +1,49 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scenes/Systems/Debug/DebugOverlay.gd" id="1"]
+
+[node name="DebugOverlay" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1")
+
+[node name="Panel" type="Panel" parent="."]
+custom_minimum_size = Vector2(360, 220)
+layout_mode = 1
+anchors_preset = 0
+offset_left = 18.0
+offset_top = 118.0
+offset_right = 378.0
+offset_bottom = 338.0
+
+[node name="Margin" type="MarginContainer" parent="Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 14
+
+[node name="VBox" type="VBoxContainer" parent="Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="State" type="Label" parent="Panel/Margin/VBox"]
+layout_mode = 2
+text = "State: BOOT"
+theme_override_font_sizes/font_size = 20
+
+[node name="Body" type="Label" parent="Panel/Margin/VBox"]
+layout_mode = 2
+vertical_alignment = 0
+autowrap_mode = 3
+theme_override_font_sizes/font_size = 16

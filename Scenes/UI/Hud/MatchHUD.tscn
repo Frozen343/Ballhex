@@ -1,0 +1,93 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://Scenes/UI/Hud/MatchHUD.gd" id="1"]
+
+[node name="MatchHUD" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1")
+
+[node name="Scoreboard" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+grow_horizontal = 2
+offset_left = 24.0
+offset_top = 22.0
+offset_right = -24.0
+offset_bottom = 106.0
+
+[node name="Panel" type="Panel" parent="Scoreboard"]
+custom_minimum_size = Vector2(0, 84)
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="Scoreboard/Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 14
+
+[node name="HBox" type="HBoxContainer" parent="Scoreboard/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 36
+alignment = 1
+
+[node name="RedScore" type="Label" parent="Scoreboard/Panel/Margin/HBox"]
+layout_mode = 2
+text = "RED 0"
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(0.976471, 0.301961, 0.301961, 1)
+
+[node name="Timer" type="Label" parent="Scoreboard/Panel/Margin/HBox"]
+layout_mode = 2
+text = "02:00"
+theme_override_font_sizes/font_size = 30
+theme_override_colors/font_color = Color(0.937255, 0.94902, 0.972549, 1)
+
+[node name="BlueScore" type="Label" parent="Scoreboard/Panel/Margin/HBox"]
+layout_mode = 2
+text = "0 BLUE"
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(0.278431, 0.627451, 1, 1)
+
+[node name="Announcement" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -320.0
+offset_top = -64.0
+offset_right = 320.0
+offset_bottom = 64.0
+text = ""
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 56
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+
+[node name="Hint" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = -42.0
+offset_right = -24.0
+offset_bottom = -18.0
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 16
+theme_override_colors/font_color = Color(0.862745, 0.901961, 0.92549, 0.88)
