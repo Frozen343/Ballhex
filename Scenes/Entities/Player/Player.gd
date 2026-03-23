@@ -36,6 +36,14 @@ var _field_active := true
 var _remote_input_direction := Vector2.ZERO
 var _remote_kick_requested := false
 
+# Client interpolation
+var _net_target_position := Vector2.ZERO
+var _net_target_velocity := Vector2.ZERO
+var _net_target_facing := Vector2.RIGHT
+var _net_interpolating := false
+const NET_INTERP_SPEED := 15.0
+const NET_SNAP_THRESHOLD := 200.0
+
 
 func _ready() -> void:
 	collision_layer = 2
@@ -60,6 +68,15 @@ func _physics_process(delta: float) -> void:
 	if NetworkManager.is_online and not NetworkManager.is_host():
 		_send_local_input_to_host()
 		_kick_flash_strength = move_toward(_kick_flash_strength, 0.0, delta * 4.5)
+		if _net_interpolating:
+			var lerp_factor := clampf(NET_INTERP_SPEED * delta, 0.0, 1.0)
+			position = position.lerp(_net_target_position + _net_target_velocity * delta, lerp_factor)
+			velocity = velocity.lerp(_net_target_velocity, lerp_factor)
+			var current_angle := facing_direction.angle()
+			var target_angle := _net_target_facing.angle()
+			facing_direction = Vector2.from_angle(lerp_angle(current_angle, target_angle, lerp_factor))
+			# Advance target by velocity to predict between syncs
+			_net_target_position += _net_target_velocity * delta
 		queue_redraw()
 		return
 
@@ -71,7 +88,11 @@ func _physics_process(delta: float) -> void:
 	if input_enabled:
 		var input_direction := _get_effective_input()
 		if input_direction.length_squared() > 0.0:
-			facing_direction = input_direction.normalized()
+			var target_facing := input_direction.normalized()
+			var current_angle := facing_direction.angle()
+			var target_angle := target_facing.angle()
+			var new_angle := lerp_angle(current_angle, target_angle, clampf(facing_turn_speed * delta, 0.0, 1.0))
+			facing_direction = Vector2.from_angle(new_angle)
 		var kick_pressed := false
 		if _is_local_player():
 			kick_pressed = Input.is_action_just_pressed(_get_local_profile()["kick"])
@@ -120,6 +141,10 @@ func reset_to_spawn() -> void:
 	velocity = Vector2.ZERO
 	kick_cooldown.reset()
 	_kick_flash_strength = 0.0
+	_net_interpolating = false
+	_net_target_position = spawn_position
+	_net_target_velocity = Vector2.ZERO
+	_net_target_facing = facing_direction
 
 
 func set_spawn_position(value: Vector2) -> void:
@@ -218,12 +243,26 @@ func build_net_state() -> Dictionary:
 
 func apply_net_state(state: Dictionary) -> void:
 	set_field_active(state.get("active", true))
-	position = Vector2(state["px"], state["py"])
-	velocity = Vector2(state["vx"], state["vy"])
-	facing_direction = Vector2(state["fx"], state["fy"])
 	_kick_flash_strength = state["kf"]
 	controller_peer_id = int(state.get("owner", controller_peer_id))
 	set_display_name(str(state.get("name", display_name)))
+
+	var target_pos := Vector2(state["px"], state["py"])
+	var target_vel := Vector2(state["vx"], state["vy"])
+	var target_face := Vector2(state["fx"], state["fy"])
+
+	# If distance is too large (teleport/reset), snap immediately
+	if position.distance_to(target_pos) > NET_SNAP_THRESHOLD:
+		position = target_pos
+		velocity = target_vel
+		facing_direction = target_face
+		_net_interpolating = false
+	else:
+		_net_target_position = target_pos
+		_net_target_velocity = target_vel
+		_net_target_facing = target_face
+		_net_interpolating = true
+
 	queue_redraw()
 
 

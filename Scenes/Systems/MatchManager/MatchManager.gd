@@ -336,8 +336,8 @@ func _clear_legacy_players() -> void:
 
 func _rebuild_roster_for_current_mode() -> void:
 	_remove_all_field_players()
+	var previous_roster := _roster.duplicate(true)
 	_roster.clear()
-	_banned_names.clear()
 
 	if NetworkManager.is_online:
 		if _is_authority():
@@ -354,7 +354,12 @@ func _rebuild_roster_for_current_mode() -> void:
 			for peer_id in NetworkManager.get_connected_peer_ids():
 				if peer_id == local_peer_id:
 					continue
-				_roster[peer_id] = _make_roster_entry(peer_id, "Player %d" % peer_id, GameEnums.TeamId.NEUTRAL, false, false)
+				var prev_entry: Dictionary = previous_roster.get(peer_id, {})
+				var prev_name: String = str(prev_entry.get("name", "Player %d" % peer_id))
+				var prev_team: int = int(prev_entry.get("team_id", GameEnums.TeamId.NEUTRAL))
+				var prev_admin: bool = bool(prev_entry.get("is_admin", false))
+				_roster[peer_id] = _make_roster_entry(peer_id, prev_name, prev_team, prev_admin, false)
+				_update_field_player_from_roster(peer_id, true)
 		else:
 			ball.reset_ball(Vector2.ZERO)
 			ball.set_ball_motion_enabled(false)
@@ -463,6 +468,7 @@ func _update_field_player_from_roster(peer_id: int, reposition: bool) -> void:
 		created = true
 
 	player.player_id = peer_id
+	var previous_team := player.team_id
 	player.team_id = team_id as GameEnums.TeamId
 	player.set_controller_peer_id(peer_id)
 	player.set_display_name(str(entry.get("name", "Player")))
@@ -473,6 +479,8 @@ func _update_field_player_from_roster(peer_id: int, reposition: bool) -> void:
 		player.set_spawn_position(_get_random_spawn_position(team_id, peer_id))
 		player.reset_to_spawn()
 	player.set_input_enabled(not _match_over)
+	if created or previous_team != team_id:
+		player.queue_redraw()
 
 
 func _remove_field_player(peer_id: int) -> void:

@@ -22,6 +22,13 @@ var last_touch_team_id := GameEnums.TeamId.NEUTRAL
 var active := false
 var _tracked_players: Array[HexPlayer] = []
 
+# Client interpolation
+var _net_target_position := Vector2.ZERO
+var _net_target_velocity := Vector2.ZERO
+var _net_interpolating := false
+const NET_INTERP_SPEED := 18.0
+const NET_SNAP_THRESHOLD := 200.0
+
 
 func _ready() -> void:
 	collision_layer = 4
@@ -39,6 +46,11 @@ func _physics_process(delta: float) -> void:
 		return
 	# Client tarafında fizik çalıştırma — state host'tan gelecek
 	if NetworkManager.is_online and not NetworkManager.is_host():
+		if _net_interpolating:
+			var lerp_factor := clampf(NET_INTERP_SPEED * delta, 0.0, 1.0)
+			position = position.lerp(_net_target_position + _net_target_velocity * delta, lerp_factor)
+			velocity = velocity.lerp(_net_target_velocity, lerp_factor)
+			_net_target_position += _net_target_velocity * delta
 		return
 
 	velocity = velocity.move_toward(Vector2.ZERO, drag * delta)
@@ -65,6 +77,9 @@ func reset_ball(reset_position: Vector2 = Vector2.ZERO) -> void:
 	last_touch_player_id = -1
 	last_touch_team_id = GameEnums.TeamId.NEUTRAL
 	active = false
+	_net_interpolating = false
+	_net_target_position = reset_position
+	_net_target_velocity = Vector2.ZERO
 
 
 func apply_kick_impulse(direction: Vector2, strength: float, player: HexPlayer) -> void:
@@ -209,8 +224,18 @@ func build_net_state() -> Dictionary:
 
 
 func apply_net_state(state: Dictionary) -> void:
-	position = Vector2(state["px"], state["py"])
-	velocity = Vector2(state["vx"], state["vy"])
+	var target_pos := Vector2(state["px"], state["py"])
+	var target_vel := Vector2(state["vx"], state["vy"])
 	active = state["active"]
 	last_touch_player_id = state["ltp"]
 	last_touch_team_id = state["ltt"]
+
+	# If distance is too large (teleport/reset) or ball just became active, snap
+	if position.distance_to(target_pos) > NET_SNAP_THRESHOLD or not active:
+		position = target_pos
+		velocity = target_vel
+		_net_interpolating = false
+	else:
+		_net_target_position = target_pos
+		_net_target_velocity = target_vel
+		_net_interpolating = true
