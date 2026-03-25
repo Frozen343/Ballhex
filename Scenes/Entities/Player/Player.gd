@@ -12,6 +12,7 @@ signal kick_attempted(player: HexPlayer)
 @export var body_mass := 6.0
 @export var body_restitution := 0.12
 @export var body_contact_friction := 0.18
+@export var turn_grip := 12.0
 @export var facing_turn_speed := 12.0
 @export var kick_strength := 840.0
 @export var kick_contact_margin := 7.0
@@ -123,14 +124,16 @@ func _physics_process(delta: float) -> void:
 		delta,
 		0.08
 	)
+	if input_direction.length_squared() > 0.0:
+		velocity = MomentumPhysics2D.apply_lateral_grip(velocity, input_direction, turn_grip, delta)
 	if input_enabled:
 		velocity = MomentumPhysics2D.clamp_total_speed(velocity, move_speed)
 
 	if velocity.length_squared() > 0.0001 or input_direction.length_squared() > 0.0:
 		move_and_slide()
-		_resolve_player_overlaps()
-		_constrain_to_pitch()
-		_constrain_to_kickoff_zone()
+	_resolve_player_overlaps()
+	_constrain_to_pitch()
+	_constrain_to_kickoff_zone()
 
 	if previous_facing != facing_direction or absf(previous_flash - _kick_flash_strength) > 0.001:
 		needs_redraw = true

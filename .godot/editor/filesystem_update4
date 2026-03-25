@@ -4,3 +4,4 @@ res://Autoload/GameSettings.gd
 res://Scenes/Entities/Ball/Ball.tscn
 res://Scenes/Systems/MatchManager/MatchManager.gd
 res://Scenes/Entities/Player/Player.tscn
+res://Scripts/Components/MomentumPhysics2D.gd

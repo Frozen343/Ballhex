@@ -61,6 +61,21 @@ static func clamp_total_speed(current_velocity: Vector2, max_speed: float) -> Ve
 	return current_velocity.limit_length(max_speed)
 
 
+static func apply_lateral_grip(
+	current_velocity: Vector2,
+	direction: Vector2,
+	grip_strength: float,
+	delta: float
+) -> Vector2:
+	if direction.length_squared() <= 0.0 or grip_strength <= 0.0:
+		return current_velocity
+	var forward: Vector2 = direction.normalized()
+	var forward_velocity: Vector2 = forward * current_velocity.dot(forward)
+	var lateral_velocity: Vector2 = current_velocity - forward_velocity
+	var grip_factor: float = clampf(grip_strength * delta, 0.0, 1.0)
+	return forward_velocity + lateral_velocity.lerp(Vector2.ZERO, grip_factor)
+
+
 static func apply_impulse(current_velocity: Vector2, impulse: Vector2, mass: float) -> Vector2:
 	var safe_mass: float = maxf(mass, 0.001)
 	return current_velocity + impulse / safe_mass
