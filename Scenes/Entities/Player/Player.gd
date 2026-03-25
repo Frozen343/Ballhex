@@ -18,9 +18,15 @@ signal kick_attempted(player: HexPlayer)
 @export var kick_contact_margin := 7.0
 @export var body_radius := GameSettings.PLAYER_RADIUS
 @export var out_of_bounds_margin := 80.0
+@export var dash_impulse := 980.0
+@export var dash_speed_bonus := 180.0
+@export var dash_bonus_decay := 150.0
+@export var power_shot_contact_bonus := 6.0
 
 @onready var collision_shape: CollisionShape2D = $CollisionShape2D
 @onready var kick_cooldown: CooldownComponent = $KickCooldown
+@onready var dash_cooldown: CooldownComponent = $DashCooldown
+@onready var power_shot_cooldown: CooldownComponent = $PowerShotCooldown
 @onready var name_label: Label = $NameLabel
 @onready var initials_label: Label = $InitialsLabel
 
@@ -36,8 +42,11 @@ var _field_active := true
 # Network
 var _remote_input_direction := Vector2.ZERO
 var _remote_kick_requested := false
+var _remote_dash_requested := false
+var _remote_power_shot_requested := false
 var _kickoff_restricted := false
 var _kickoff_half_locked := false
+var _speed_cap_bonus := 0.0
 
 # Client interpolation
 var _net_target_position := Vector2.ZERO
@@ -88,7 +97,9 @@ func _physics_process(delta: float) -> void:
 	var previous_facing := facing_direction
 	var previous_flash := _kick_flash_strength
 	_kick_flash_strength = move_toward(_kick_flash_strength, 0.0, delta * 4.5)
+	_speed_cap_bonus = move_toward(_speed_cap_bonus, 0.0, dash_bonus_decay * delta)
 	var input_direction := Vector2.ZERO
+	var current_speed_cap := move_speed + _speed_cap_bonus
 
 	if input_enabled:
 		input_direction = _get_effective_input()
@@ -99,11 +110,26 @@ func _physics_process(delta: float) -> void:
 			var new_angle := lerp_angle(current_angle, target_angle, clampf(facing_turn_speed * delta, 0.0, 1.0))
 			facing_direction = Vector2.from_angle(new_angle)
 		var kick_pressed := false
+		var dash_pressed := false
+		var power_shot_pressed := false
 		if _is_local_player():
-			kick_pressed = not GameSettings.chat_active and Input.is_action_just_pressed(_get_local_profile()["kick"])
+			var profile := _get_local_profile()
+			kick_pressed = not GameSettings.chat_active and Input.is_action_just_pressed(profile["kick"])
+			dash_pressed = not GameSettings.chat_active and Input.is_action_just_pressed(profile["dash"])
+			power_shot_pressed = not GameSettings.chat_active and Input.is_action_just_pressed(profile["power_shot"])
 		else:
 			kick_pressed = _remote_kick_requested
 			_remote_kick_requested = false
+			dash_pressed = _remote_dash_requested
+			_remote_dash_requested = false
+			power_shot_pressed = _remote_power_shot_requested
+			_remote_power_shot_requested = false
+		if dash_pressed:
+			_attempt_dash(input_direction)
+			current_speed_cap = move_speed + _speed_cap_bonus
+		if power_shot_pressed:
+			_trigger_kick_flash()
+			_attempt_power_shot(input_direction)
 		if kick_pressed:
 			_trigger_kick_flash()
 			_attempt_kick(input_direction)
@@ -114,8 +140,8 @@ func _physics_process(delta: float) -> void:
 			body_mass,
 			delta
 		)
-		velocity = MomentumPhysics2D.clamp_speed_along_direction(velocity, input_direction, move_speed)
-		velocity = MomentumPhysics2D.clamp_total_speed(velocity, move_speed)
+		velocity = MomentumPhysics2D.clamp_speed_along_direction(velocity, input_direction, current_speed_cap)
+		velocity = MomentumPhysics2D.clamp_total_speed(velocity, current_speed_cap)
 
 	velocity = MomentumPhysics2D.apply_surface_friction(
 		velocity,
@@ -127,7 +153,7 @@ func _physics_process(delta: float) -> void:
 	if input_direction.length_squared() > 0.0:
 		velocity = MomentumPhysics2D.apply_lateral_grip(velocity, input_direction, turn_grip, delta)
 	if input_enabled:
-		velocity = MomentumPhysics2D.clamp_total_speed(velocity, move_speed)
+		velocity = MomentumPhysics2D.clamp_total_speed(velocity, current_speed_cap)
 
 	if velocity.length_squared() > 0.0001 or input_direction.length_squared() > 0.0:
 		move_and_slide()
@@ -149,13 +175,17 @@ func set_input_enabled(value: bool) -> void:
 	input_enabled = value and _field_active
 	if not input_enabled:
 		velocity = Vector2.ZERO
+		_speed_cap_bonus = 0.0
 
 
 func reset_to_spawn() -> void:
 	position = spawn_position
 	velocity = Vector2.ZERO
 	kick_cooldown.reset()
+	dash_cooldown.reset()
+	power_shot_cooldown.reset()
 	_kick_flash_strength = 0.0
+	_speed_cap_bonus = 0.0
 	_net_interpolating = false
 	_net_target_position = spawn_position
 	_net_target_velocity = Vector2.ZERO
@@ -188,8 +218,11 @@ func set_field_active(value: bool) -> void:
 	if not value:
 		input_enabled = false
 		velocity = Vector2.ZERO
+		_speed_cap_bonus = 0.0
 		_remote_input_direction = Vector2.ZERO
 		_remote_kick_requested = false
+		_remote_dash_requested = false
+		_remote_power_shot_requested = false
 
 
 func is_field_active() -> bool:
@@ -227,7 +260,9 @@ func _send_local_input_to_host() -> void:
 	var dir := _get_local_input()
 	var profile := _get_local_profile()
 	var kick := not GameSettings.chat_active and Input.is_action_just_pressed(profile["kick"])
-	_rpc_send_input.rpc_id(1, dir.x, dir.y, kick)
+	var dash := not GameSettings.chat_active and Input.is_action_just_pressed(profile["dash"])
+	var power_shot := not GameSettings.chat_active and Input.is_action_just_pressed(profile["power_shot"])
+	_rpc_send_input.rpc_id(1, dir.x, dir.y, kick, dash, power_shot)
 
 
 func _get_local_profile() -> Dictionary:
@@ -237,10 +272,14 @@ func _get_local_profile() -> Dictionary:
 
 
 @rpc("any_peer", "unreliable", "call_remote")
-func _rpc_send_input(dir_x: float, dir_y: float, kick: bool) -> void:
+func _rpc_send_input(dir_x: float, dir_y: float, kick: bool, dash: bool, power_shot: bool) -> void:
 	_remote_input_direction = Vector2(dir_x, dir_y)
 	if kick:
 		_remote_kick_requested = true
+	if dash:
+		_remote_dash_requested = true
+	if power_shot:
+		_remote_power_shot_requested = true
 
 
 func build_net_state() -> Dictionary:
@@ -292,18 +331,50 @@ func _attempt_kick(input_direction: Vector2) -> void:
 	if to_ball.length() > contact_distance:
 		return
 
-	var kick_direction := facing_direction
-	if input_direction.length_squared() > 0.0:
-		kick_direction = input_direction.normalized()
-	elif to_ball.length_squared() > 0.0:
-		kick_direction = to_ball.normalized()
-
-	if to_ball.length_squared() > 0.0:
-		kick_direction = (kick_direction + to_ball.normalized() * 0.18).normalized()
+	var kick_direction := _build_shot_direction(input_direction, to_ball)
 	_ball.apply_kick_impulse(kick_direction, kick_strength, self)
 	kick_cooldown.trigger()
 	GameEvents.emit_ball_kicked(player_id, team_id)
 	kick_attempted.emit(self)
+
+
+func _attempt_dash(input_direction: Vector2) -> void:
+	if not dash_cooldown.is_ready():
+		return
+	var dash_direction := facing_direction
+	if input_direction.length_squared() > 0.0:
+		dash_direction = input_direction.normalized()
+	elif facing_direction.length_squared() > 0.0:
+		dash_direction = facing_direction.normalized()
+	velocity = MomentumPhysics2D.apply_impulse(velocity, dash_direction * dash_impulse, body_mass)
+	_speed_cap_bonus = maxf(_speed_cap_bonus, dash_speed_bonus)
+	dash_cooldown.trigger()
+
+
+func _attempt_power_shot(input_direction: Vector2) -> void:
+	if _ball == null or not power_shot_cooldown.is_ready() or not kick_cooldown.is_ready():
+		return
+	var to_ball := _ball.position - position
+	var contact_distance := body_radius + _ball.radius + kick_contact_margin + power_shot_contact_bonus
+	if to_ball.length() > contact_distance:
+		return
+	var shot_direction := _build_shot_direction(input_direction, to_ball)
+	_ball.apply_power_shot(shot_direction, self)
+	power_shot_cooldown.trigger()
+	kick_cooldown.trigger()
+	GameEvents.emit_ball_kicked(player_id, team_id)
+	kick_attempted.emit(self)
+
+
+func _build_shot_direction(input_direction: Vector2, to_ball: Vector2) -> Vector2:
+	var shot_direction := facing_direction
+	if input_direction.length_squared() > 0.0:
+		shot_direction = input_direction.normalized()
+	elif to_ball.length_squared() > 0.0:
+		shot_direction = to_ball.normalized()
+	if to_ball.length_squared() > 0.0:
+		shot_direction = (shot_direction + to_ball.normalized() * 0.18).normalized()
+	return shot_direction
 
 
 func _update_name_label() -> void:

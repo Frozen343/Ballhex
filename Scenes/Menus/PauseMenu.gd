@@ -89,16 +89,22 @@ func hide_panel() -> void:
 func _refresh_result_label(snapshot: Dictionary) -> void:
 	var red_score := int(snapshot.get("red_score", 0))
 	var blue_score := int(snapshot.get("blue_score", 0))
+	var match_duration_seconds := float(snapshot.get("match_duration_seconds", GameSettings.MATCH_DURATION_SECONDS))
+	var score_limit := int(snapshot.get("score_limit", GameSettings.DEFAULT_SCORE_LIMIT))
+	var overtime := bool(snapshot.get("overtime", false))
 	var result_title := str(snapshot.get("result_title", ""))
 	var result_detail := str(snapshot.get("result_detail", ""))
 	if _match_over:
 		status_label.text = "%s   %s" % [result_title, result_detail]
 		resume_button.text = "Close"
+	elif overtime:
+		status_label.text = "OVERTIME   Red %d - %d Blue   Next goal wins" % [red_score, blue_score]
+		resume_button.text = "Resume"
 	else:
 		status_label.text = "Score: Red %d - %d Blue" % [red_score, blue_score]
 		resume_button.text = "Resume"
 	var manage_hint := "Drag players between columns or use buttons below" if _can_manage else "ESC ile odayi acip kapatabilirsin."
-	helper_label.text = manage_hint
+	helper_label.text = "%s   Time: %s   Goal limit: %d" % [manage_hint, Helpers.format_match_time(match_duration_seconds), score_limit]
 	restart_button.visible = _can_manage
 	restart_button.disabled = not _can_manage
 

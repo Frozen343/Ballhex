@@ -30,6 +30,8 @@ var lobby_max_players := 2
 var available_lobbies: Array = []
 var active_lobby_id := ""
 var active_lobby_name := ""
+var active_match_duration_seconds := GameSettings.MATCH_DURATION_SECONDS
+var active_score_limit := GameSettings.DEFAULT_SCORE_LIMIT
 var connected_peer_ids: Array[int] = []
 
 var _peer: ENetMultiplayerPeer
@@ -92,12 +94,24 @@ func get_lobby_capacity() -> int:
 	return max(2, lobby_max_players)
 
 
-func host_game(port: int = DEFAULT_PORT, lobby_name: String = "", max_players: int = DEFAULT_LOBBY_CAPACITY) -> Error:
+func host_game(
+	port: int = DEFAULT_PORT,
+	lobby_name: String = "",
+	max_players: int = DEFAULT_LOBBY_CAPACITY,
+	match_duration_seconds: float = GameSettings.MATCH_DURATION_SECONDS,
+	score_limit: int = GameSettings.DEFAULT_SCORE_LIMIT
+) -> Error:
+	var safe_match_duration_seconds := _sanitize_match_duration_seconds(match_duration_seconds)
+	var safe_score_limit := _sanitize_score_limit(score_limit)
+	var safe_lobby_name := _sanitize_lobby_name(lobby_name)
 	if uses_web_lobbies():
-		_start_web_host_flow(lobby_name, max_players)
+		_start_web_host_flow(safe_lobby_name, max_players, safe_match_duration_seconds, safe_score_limit)
 		return OK
 
 	_cleanup()
+	active_match_duration_seconds = safe_match_duration_seconds
+	active_score_limit = safe_score_limit
+	active_lobby_name = safe_lobby_name
 	_peer = ENetMultiplayerPeer.new()
 	var error := _peer.create_server(port, MAX_CLIENTS)
 	if error != OK:
@@ -165,10 +179,12 @@ func _bind_signals() -> void:
 		multiplayer.server_disconnected.connect(_on_server_disconnected)
 
 
-func _start_web_host_flow(lobby_name: String, max_players: int) -> void:
+func _start_web_host_flow(lobby_name: String, max_players: int, match_duration_seconds: float, score_limit: int) -> void:
 	_cleanup()
 	local_peer_id = 1
 	lobby_max_players = max(2, max_players)
+	active_match_duration_seconds = _sanitize_match_duration_seconds(match_duration_seconds)
+	active_score_limit = _sanitize_score_limit(score_limit)
 	var error := _create_web_host_peer()
 	if error != OK:
 		_fail_matchmaking("Web host baslatilamadi.", true)
@@ -176,7 +192,7 @@ func _start_web_host_flow(lobby_name: String, max_players: int) -> void:
 
 	active_lobby_name = _sanitize_lobby_name(lobby_name)
 	matchmaking_status_changed.emit("Lobi olusturuluyor...")
-	_host_lobby_async.call_deferred(active_lobby_name, lobby_max_players)
+	_host_lobby_async.call_deferred(active_lobby_name, lobby_max_players, active_match_duration_seconds, active_score_limit)
 
 
 func _start_web_join_flow(lobby_id: String) -> void:
@@ -219,13 +235,15 @@ func _create_web_client_peer(peer_id: int) -> Error:
 	return OK
 
 
-func _host_lobby_async(lobby_name: String, max_players: int) -> void:
+func _host_lobby_async(lobby_name: String, max_players: int, match_duration_seconds: float, score_limit: int) -> void:
 	var response := await _request_json(
 		HTTPClient.METHOD_POST,
 		_build_http_url(WEB_LOBBIES_PATH),
 		{
 			"name": lobby_name,
-			"maxPlayers": max_players
+			"maxPlayers": max_players,
+			"matchDurationSeconds": match_duration_seconds,
+			"scoreLimit": score_limit
 		}
 	)
 	if not response.get("ok", false):
@@ -236,6 +254,8 @@ func _host_lobby_async(lobby_name: String, max_players: int) -> void:
 	active_lobby_id = str(data.get("id", ""))
 	active_lobby_name = str(data.get("name", lobby_name))
 	lobby_max_players = int(data.get("maxPlayers", max_players))
+	active_match_duration_seconds = _sanitize_match_duration_seconds(float(data.get("matchDurationSeconds", match_duration_seconds)))
+	active_score_limit = _sanitize_score_limit(int(data.get("scoreLimit", score_limit)))
 	if active_lobby_id.is_empty():
 		_fail_matchmaking("Lobby kimligi alinamadi.", true)
 		return
@@ -351,10 +371,14 @@ func _handle_signaling_message(message: Dictionary) -> void:
 		"host_ready":
 			var lobby_info: Dictionary = message.get("lobby", {})
 			lobby_max_players = int(lobby_info.get("maxPlayers", lobby_max_players))
+			active_match_duration_seconds = _sanitize_match_duration_seconds(float(lobby_info.get("matchDurationSeconds", active_match_duration_seconds)))
+			active_score_limit = _sanitize_score_limit(int(lobby_info.get("scoreLimit", active_score_limit)))
 			matchmaking_status_changed.emit("Lobby yayinlandi")
 		"guest_ready":
 			var ready_lobby: Dictionary = message.get("lobby", {})
 			lobby_max_players = int(ready_lobby.get("maxPlayers", lobby_max_players))
+			active_match_duration_seconds = _sanitize_match_duration_seconds(float(ready_lobby.get("matchDurationSeconds", active_match_duration_seconds)))
+			active_score_limit = _sanitize_score_limit(int(ready_lobby.get("scoreLimit", active_score_limit)))
 			matchmaking_status_changed.emit("Host baglantisi bekleniyor...")
 		"guest_joined":
 			_on_guest_joined_for_webrtc(int(message.get("peerId", 2)))
@@ -575,6 +599,14 @@ func _sanitize_lobby_name(lobby_name: String) -> String:
 	return cleaned
 
 
+func _sanitize_match_duration_seconds(duration_seconds: float) -> float:
+	return clampf(duration_seconds, GameSettings.MIN_MATCH_DURATION_SECONDS, GameSettings.MAX_MATCH_DURATION_SECONDS)
+
+
+func _sanitize_score_limit(score_limit: int) -> int:
+	return maxi(GameSettings.MIN_SCORE_LIMIT, mini(GameSettings.MAX_SCORE_LIMIT, score_limit))
+
+
 func _get_connection_peer_id(signaling_peer_id: int) -> int:
 	if is_host_player:
 		return signaling_peer_id
@@ -693,6 +725,8 @@ func _cleanup() -> void:
 	lobby_max_players = 2
 	active_lobby_id = ""
 	active_lobby_name = ""
+	active_match_duration_seconds = GameSettings.MATCH_DURATION_SECONDS
+	active_score_limit = GameSettings.DEFAULT_SCORE_LIMIT
 	connected_peer_ids.clear()
 
 

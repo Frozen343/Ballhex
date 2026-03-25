@@ -1,11 +1,11 @@
 res://Scenes/App/App.tscn::ea1bf5a45a98ec67160cbda3e6372d0f::1774285250::res://.godot/exported/133200997/export-763e493f45b5eca3ba8ea980e88afe09-App.scn
 res://Scenes/Entities/Ball/Ball.tscn::1753c9014510cba5b2df30eb0e4c867b::1774465708::res://.godot/exported/133200997/export-c61d41f7f2918ae8627312a4a74a5548-Ball.scn
 res://Scenes/Entities/Goal/Goal.tscn::b5ddacdb89867c3bcf5b7057eb5d6454::1774127923::res://.godot/exported/133200997/export-42afa6ec4486012af054681178a54716-Goal.scn
-res://Scenes/Entities/Player/Player.tscn::f649cf576a7ff5ea97e9e87f94fb1102::1774470014::res://.godot/exported/133200997/export-6faa2cafb5404dcce6d3cb596def0bac-Player.scn
+res://Scenes/Entities/Player/Player.tscn::6969570a26eb5007244df34ffce32a08::1774472309::res://.godot/exported/133200997/export-6faa2cafb5404dcce6d3cb596def0bac-Player.scn
 res://Scenes/Match/Match.tscn::34d58c2082aece23a85f685954ec222d::1774272430::res://.godot/exported/133200997/export-8f07c4130d72e71ac5748ed63d4290ea-Match.scn
 res://Scenes/Match/Pitch.tscn::653151d07aa6ac3ad31df4df7e697886::1774126477::res://.godot/exported/133200997/export-3932424059f483c431719b4338f04728-Pitch.scn
 res://Scenes/Menus/EndMatchPanel.tscn::284ebcaf77847c993f5446bc52bacf88::1774279492::res://.godot/exported/133200997/export-1502e49c39522de7f133fc52fe6a9c12-EndMatchPanel.scn
-res://Scenes/Menus/MainMenu.tscn::86b0b2ce08a45f74fdb237f825d5b629::1774279523::res://.godot/exported/133200997/export-8a2cd17ba7100c069efc16d196e2654d-MainMenu.scn
+res://Scenes/Menus/MainMenu.tscn::3744775ae545a29130f6707f121cc7d1::1774472960::res://.godot/exported/133200997/export-8a2cd17ba7100c069efc16d196e2654d-MainMenu.scn
 res://Scenes/Menus/PauseMenu.tscn::7efebe27aefcbdac6ce4971c82a12842::1774282029::res://.godot/exported/133200997/export-ef2249417db3638d9e31f05dde7e215a-PauseMenu.scn
 res://Scenes/Systems/Debug/DebugOverlay.tscn::f4390bbe8162a93ec32b08b6616bbbc7::1774126542::res://.godot/exported/133200997/export-4cadd546f38e9445d7e9190752fc6b6d-DebugOverlay.scn
 res://Scenes/UI/Hud/MatchHUD.tscn::d8db1129ac0276907b2952c2bf008908::1774462185::res://.godot/exported/133200997/export-2bb725060860d677d14568f287dfa4e8-MatchHUD.scn

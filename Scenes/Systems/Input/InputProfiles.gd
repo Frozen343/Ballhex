@@ -8,7 +8,8 @@ const PROFILES := {
 		"left": "p1_left",
 		"right": "p1_right",
 		"kick": "p1_kick",
-		"dash": "p1_dash"
+		"dash": "p1_dash",
+		"power_shot": "p1_power_shot"
 	},
 	2: {
 		"up": "p2_up",
@@ -16,7 +17,8 @@ const PROFILES := {
 		"left": "p2_left",
 		"right": "p2_right",
 		"kick": "p2_kick",
-		"dash": "p2_dash"
+		"dash": "p2_dash",
+		"power_shot": "p2_power_shot"
 	}
 }
 

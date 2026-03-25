@@ -41,6 +41,9 @@ var _state_before_pause := GameEnums.MatchState.PLAYING
 var _hard_paused := false
 var _last_scoring_team := GameEnums.TeamId.NEUTRAL
 var _kickoff_active := false
+var _overtime_active := false
+var _match_duration_seconds := GameSettings.MATCH_DURATION_SECONDS
+var _score_limit := GameSettings.DEFAULT_SCORE_LIMIT
 
 
 func _ready() -> void:
@@ -83,12 +86,15 @@ func start_new_match() -> void:
 	_hard_paused = false
 	_last_scoring_team = GameEnums.TeamId.NEUTRAL
 	_kickoff_active = false
+	_overtime_active = false
+	_match_duration_seconds = _resolve_match_duration_seconds()
+	_score_limit = _resolve_score_limit()
 	_set_state(GameEnums.MatchState.PLAYING)
 	match_finished.emit("", "")
 	pause_changed.emit(false)
 	hard_pause_changed.emit(false)
 	score_changed.emit(red_score, blue_score)
-	time_system.setup(GameSettings.MATCH_DURATION_SECONDS)
+	time_system.setup(_match_duration_seconds)
 	timer_changed.emit(time_system.remaining_seconds)
 	_rebuild_roster_for_current_mode()
 	_configure_goals(true)
@@ -435,11 +441,10 @@ func _rebuild_roster_for_current_mode() -> void:
 			_roster[local_peer_id] = _make_roster_entry(
 				local_peer_id,
 				GameSettings.player_name,
-				GameEnums.TeamId.RED,
+				GameEnums.TeamId.NEUTRAL,
 				true,
 				true
 			)
-			_update_field_player_from_roster(local_peer_id, true)
 
 			for peer_id in NetworkManager.get_connected_peer_ids():
 				if peer_id == local_peer_id:
@@ -687,7 +692,7 @@ func _apply_simulation_state() -> void:
 	var simulation_active := not _match_over and not _hard_paused
 	_configure_match_activity(simulation_active)
 	if _is_authority():
-		if simulation_active:
+		if simulation_active and not _overtime_active:
 			time_system.start()
 		else:
 			time_system.stop()
@@ -767,12 +772,19 @@ func _register_goal(scoring_team: int) -> void:
 		blue_score += 1
 
 	score_changed.emit(red_score, blue_score)
+	GameEvents.emit_goal_scored(scoring_team, ball.last_touch_player_id)
+	if _overtime_active:
+		_overtime_active = false
+		_finish_match("Altin gol", "%s altin gol ile kazandi" % Helpers.team_name(scoring_team))
+		return
+	if _has_reached_score_limit():
+		_finish_match("Gol limiti", "%s %d gole ulasti" % [Helpers.team_name(scoring_team), _score_limit])
+		return
 	_set_state(GameEnums.MatchState.GOAL_SCORED)
 	_configure_goals(false)
 	_goal_reset_remaining = DEFAULT_GOAL_RESET_DELAY
 	var announcement_text := "%s scored" % Helpers.team_name(scoring_team)
 	announcement_requested.emit(announcement_text, Helpers.team_color(scoring_team), 1.0)
-	GameEvents.emit_goal_scored(scoring_team, ball.last_touch_player_id)
 	_broadcast_world_state()
 	_broadcast_room_state()
 
@@ -816,6 +828,9 @@ func _build_room_state_snapshot(viewer_peer_id: int) -> Dictionary:
 		"blue": blue_entries,
 		"can_manage": _can_manage_roster(viewer_peer_id),
 		"match_over": _match_over,
+		"overtime": _overtime_active,
+		"match_duration_seconds": _match_duration_seconds,
+		"score_limit": _score_limit,
 		"result_title": _result_title,
 		"result_detail": _result_detail,
 		"red_score": red_score,
@@ -837,6 +852,9 @@ func _serialize_room_entry(entry: Dictionary) -> Dictionary:
 func _apply_room_state_snapshot(snapshot: Dictionary) -> void:
 	var previous_match_over := _match_over
 	_match_over = bool(snapshot.get("match_over", _match_over))
+	_overtime_active = bool(snapshot.get("overtime", _overtime_active))
+	_match_duration_seconds = float(snapshot.get("match_duration_seconds", _match_duration_seconds))
+	_score_limit = int(snapshot.get("score_limit", _score_limit))
 	var entries: Array = []
 	var raw_entries: Variant = snapshot.get("entries", [])
 	if typeof(raw_entries) == TYPE_ARRAY:
@@ -892,6 +910,9 @@ func _broadcast_world_state() -> void:
 		"ms": state_machine.current_state,
 		"hp": _hard_paused,
 		"match_over": _match_over,
+		"ot": _overtime_active,
+		"md": _match_duration_seconds,
+		"sl": _score_limit,
 		"goal_reset": _goal_reset_remaining,
 		"kickoff": _kickoff_active,
 		"kick_team": _last_scoring_team
@@ -905,9 +926,13 @@ func _apply_world_state_snapshot(snapshot: Dictionary) -> void:
 	var prev_red := red_score
 	var prev_blue := blue_score
 	var prev_match_over := _match_over
+	var prev_overtime := _overtime_active
 	red_score = int(snapshot.get("rs", red_score))
 	blue_score = int(snapshot.get("bs", blue_score))
 	_match_over = bool(snapshot.get("match_over", false))
+	_overtime_active = bool(snapshot.get("ot", false))
+	_match_duration_seconds = float(snapshot.get("md", _match_duration_seconds))
+	_score_limit = int(snapshot.get("sl", _score_limit))
 	_goal_reset_remaining = float(snapshot.get("goal_reset", -1.0))
 	_kickoff_active = bool(snapshot.get("kickoff", false))
 	_last_scoring_team = int(snapshot.get("kick_team", GameEnums.TeamId.NEUTRAL)) as GameEnums.TeamId
@@ -918,7 +943,7 @@ func _apply_world_state_snapshot(snapshot: Dictionary) -> void:
 	score_changed.emit(red_score, blue_score)
 	var server_timer := float(snapshot.get("timer", time_system.remaining_seconds))
 	time_system.remaining_seconds = server_timer
-	time_system.running = not _match_over and not _hard_paused
+	time_system.running = not _match_over and not _hard_paused and not _overtime_active
 	_set_state(int(snapshot.get("ms", state_machine.current_state)) as GameEnums.MatchState)
 
 	# Client-side goal announcement
@@ -926,6 +951,8 @@ func _apply_world_state_snapshot(snapshot: Dictionary) -> void:
 		announcement_requested.emit("%s scored" % Helpers.team_name(GameEnums.TeamId.RED), Helpers.team_color(GameEnums.TeamId.RED), 1.0)
 	elif blue_score > prev_blue:
 		announcement_requested.emit("%s scored" % Helpers.team_name(GameEnums.TeamId.BLUE), Helpers.team_color(GameEnums.TeamId.BLUE), 1.0)
+	if _overtime_active and not prev_overtime:
+		announcement_requested.emit("Overtime - ilk gol kazanir", Color(1.0, 0.95, 0.72, 1.0), 1.2)
 
 	# Client-side match end handling
 	if _match_over and not prev_match_over:
@@ -1039,6 +1066,14 @@ func _get_room_name() -> String:
 	return NetworkManager.active_lobby_name
 
 
+func _resolve_match_duration_seconds() -> float:
+	return clampf(NetworkManager.active_match_duration_seconds, GameSettings.MIN_MATCH_DURATION_SECONDS, GameSettings.MAX_MATCH_DURATION_SECONDS)
+
+
+func _resolve_score_limit() -> int:
+	return maxi(GameSettings.MIN_SCORE_LIMIT, mini(GameSettings.MAX_SCORE_LIMIT, NetworkManager.active_score_limit))
+
+
 func _submit_local_name_deferred() -> void:
 	if not NetworkManager.is_online or NetworkManager.is_host():
 		return
@@ -1066,22 +1101,17 @@ func _on_time_changed(remaining_seconds: float) -> void:
 func _on_time_expired() -> void:
 	if not _is_authority():
 		return
-	_match_over = true
-	_hard_paused = false
-	hard_pause_changed.emit(false)
-	_result_title = Helpers.winner_text(red_score, blue_score)
-	_result_detail = "Red %d - %d Blue" % [red_score, blue_score]
-	_configure_match_activity(false)
-	_configure_goals(false)
-	_goal_reset_remaining = -1.0
-	_set_state(GameEnums.MatchState.MATCH_ENDED)
-	match_finished.emit(_result_title, _result_detail)
-	announcement_requested.emit("Sure bitti", Color(1.0, 0.95, 0.72, 1.0), 1.0)
-	if not is_paused:
-		is_paused = true
-		pause_changed.emit(true)
-	_broadcast_room_state()
-	_broadcast_world_state()
+	if red_score == blue_score:
+		_overtime_active = true
+		_goal_reset_remaining = -1.0
+		_last_scoring_team = GameEnums.TeamId.NEUTRAL
+		_set_state(GameEnums.MatchState.PLAYING)
+		time_system.stop()
+		announcement_requested.emit("Overtime - ilk gol kazanir", Color(1.0, 0.95, 0.72, 1.0), 1.2)
+		_broadcast_room_state()
+		_broadcast_world_state()
+		return
+	_finish_match("Sure bitti", "Sure sona erdi")
 
 
 func _on_goal_scored(scoring_team: int, _defending_team: int) -> void:
@@ -1122,3 +1152,30 @@ func _on_network_server_disconnected() -> void:
 	_remove_all_field_players()
 	_roster.clear()
 	_refresh_ball_player_tracking()
+
+
+func _has_reached_score_limit() -> bool:
+	return red_score >= _score_limit or blue_score >= _score_limit
+
+
+func _finish_match(detail_prefix: String, announcement_text: String) -> void:
+	_match_over = true
+	_overtime_active = false
+	_hard_paused = false
+	hard_pause_changed.emit(false)
+	_result_title = Helpers.winner_text(red_score, blue_score)
+	_result_detail = "Red %d - %d Blue" % [red_score, blue_score]
+	if not detail_prefix.is_empty():
+		_result_detail = "%s   %s" % [detail_prefix, _result_detail]
+	_configure_match_activity(false)
+	_configure_goals(false)
+	_goal_reset_remaining = -1.0
+	_set_state(GameEnums.MatchState.MATCH_ENDED)
+	match_finished.emit(_result_title, _result_detail)
+	if not announcement_text.is_empty():
+		announcement_requested.emit(announcement_text, Color(1.0, 0.95, 0.72, 1.0), 1.0)
+	if not is_paused:
+		is_paused = true
+		pause_changed.emit(true)
+	_broadcast_room_state()
+	_broadcast_world_state()

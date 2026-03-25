@@ -94,6 +94,16 @@ func apply_kick_impulse(direction: Vector2, strength: float, player: HexPlayer) 
 	velocity = MomentumPhysics2D.clamp_total_speed(velocity, max_speed)
 
 
+func apply_power_shot(direction: Vector2, player: HexPlayer) -> void:
+	if direction.length_squared() <= 0.0:
+		return
+	_set_last_touch(player)
+	var desired_velocity := direction.normalized() * max_speed
+	var required_impulse := (desired_velocity - velocity) * ball_mass
+	velocity = MomentumPhysics2D.apply_impulse(velocity, required_impulse, ball_mass)
+	velocity = MomentumPhysics2D.clamp_total_speed(velocity, max_speed)
+
+
 func _move_with_bounce(delta: float) -> void:
 	var remaining_motion := velocity * delta
 	var iteration := 0

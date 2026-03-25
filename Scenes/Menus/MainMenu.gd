@@ -4,8 +4,11 @@ class_name MainMenu
 @onready var title_label: Label = $Margin/Layout/ListPanel/Margin/VBox/Header/TitleRow/Title
 @onready var stats_label: Label = $Margin/Layout/ListPanel/Margin/VBox/Header/TitleRow/Stats
 @onready var nick_label: Label = $Margin/Layout/ListPanel/Margin/VBox/Header/NickLabel
+@onready var columns_label: Label = $Margin/Layout/ListPanel/Margin/VBox/Columns
 @onready var lobby_name_input: LineEdit = $Margin/Layout/Sidebar/SidebarVBox/CreatePanel/CreateVBox/LobbyNameInput
 @onready var max_players_input: SpinBox = $Margin/Layout/Sidebar/SidebarVBox/CreatePanel/CreateVBox/MaxPlayersInput
+@onready var duration_input: SpinBox = $Margin/Layout/Sidebar/SidebarVBox/CreatePanel/CreateVBox/DurationInput
+@onready var score_limit_input: SpinBox = $Margin/Layout/Sidebar/SidebarVBox/CreatePanel/CreateVBox/ScoreLimitInput
 @onready var refresh_button: Button = $Margin/Layout/Sidebar/SidebarVBox/RefreshButton
 @onready var join_button: Button = $Margin/Layout/Sidebar/SidebarVBox/JoinButton
 @onready var create_button: Button = $Margin/Layout/Sidebar/SidebarVBox/CreateButton
@@ -21,6 +24,7 @@ var _displayed_lobbies: Array = []
 
 func _ready() -> void:
 	title_label.text = "Room list"
+	columns_label.text = "Name                          Players   Rules"
 	nick_label.text = "Nick: %s" % GameSettings.player_name
 	refresh_button.pressed.connect(_on_refresh_pressed)
 	join_button.pressed.connect(_on_join_pressed)
@@ -47,7 +51,13 @@ func _ready() -> void:
 
 func _on_host_pressed() -> void:
 	if not NetworkManager.uses_web_lobbies():
-		var error := NetworkManager.host_game()
+		var error := NetworkManager.host_game(
+			NetworkManager.DEFAULT_PORT,
+			lobby_name_input.text,
+			int(max_players_input.value),
+			duration_input.value * 60.0,
+			int(score_limit_input.value)
+		)
 		if error != OK:
 			status_label.text = "Could not host room."
 			return
@@ -57,7 +67,13 @@ func _on_host_pressed() -> void:
 	status_label.text = "Creating room..."
 	_set_buttons_enabled(false)
 	cancel_button.visible = true
-	NetworkManager.host_game(NetworkManager.DEFAULT_PORT, lobby_name_input.text, int(max_players_input.value))
+	NetworkManager.host_game(
+		NetworkManager.DEFAULT_PORT,
+		lobby_name_input.text,
+		int(max_players_input.value),
+		duration_input.value * 60.0,
+		int(score_limit_input.value)
+	)
 
 
 func _on_join_pressed() -> void:
@@ -80,6 +96,8 @@ func _on_join_pressed() -> void:
 	_set_buttons_enabled(false)
 	cancel_button.visible = true
 	NetworkManager.lobby_max_players = int(lobby.get("maxPlayers", 2))
+	NetworkManager.active_match_duration_seconds = float(lobby.get("matchDurationSeconds", GameSettings.MATCH_DURATION_SECONDS))
+	NetworkManager.active_score_limit = int(lobby.get("scoreLimit", GameSettings.DEFAULT_SCORE_LIMIT))
 	NetworkManager.join_game(str(lobby.get("id", "")))
 
 
@@ -112,7 +130,9 @@ func _on_lobby_selected(index: int) -> void:
 	var lobby_name := str(lobby.get("name", "Room"))
 	var player_count := int(lobby.get("playerCount", 1))
 	var max_players := int(lobby.get("maxPlayers", 2))
-	status_label.text = "%s selected (%d/%d)." % [lobby_name, player_count, max_players]
+	var duration_minutes := int(round(float(lobby.get("matchDurationSeconds", GameSettings.MATCH_DURATION_SECONDS)) / 60.0))
+	var score_limit := int(lobby.get("scoreLimit", GameSettings.DEFAULT_SCORE_LIMIT))
+	status_label.text = "%s selected (%d/%d)  %dm / %dg." % [lobby_name, player_count, max_players, duration_minutes, score_limit]
 
 
 func _on_lobbies_updated(lobbies: Array) -> void:
@@ -140,9 +160,9 @@ func _format_room_row(lobby_data: Dictionary) -> String:
 	var lobby_name := str(lobby_data.get("name", "Room"))
 	var player_count := int(lobby_data.get("playerCount", 1))
 	var max_players := int(lobby_data.get("maxPlayers", 2))
-	var pass_text := "No"
-	var distance_text := "0 km"
-	return "%s   %d/%d   %s   %s" % [lobby_name, player_count, max_players, pass_text, distance_text]
+	var duration_minutes := int(round(float(lobby_data.get("matchDurationSeconds", GameSettings.MATCH_DURATION_SECONDS)) / 60.0))
+	var score_limit := int(lobby_data.get("scoreLimit", GameSettings.DEFAULT_SCORE_LIMIT))
+	return "%s   %d/%d   %dm/%dg" % [lobby_name, player_count, max_players, duration_minutes, score_limit]
 
 
 func _on_lobby_hosted(_lobby_id: String, lobby_name: String) -> void:
@@ -185,6 +205,8 @@ func _set_buttons_enabled(enabled: bool) -> void:
 	quit_button.disabled = not enabled
 	lobby_name_input.editable = enabled
 	max_players_input.editable = enabled
+	duration_input.editable = enabled
+	score_limit_input.editable = enabled
 
 
 func _exit_tree() -> void:

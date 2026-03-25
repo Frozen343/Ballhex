@@ -116,7 +116,7 @@ layout_mode = 2
 theme_override_constants/separation = 10
 
 [node name="CreatePanel" type="Panel" parent="Margin/Layout/Sidebar/SidebarVBox"]
-custom_minimum_size = Vector2(0, 158)
+custom_minimum_size = Vector2(0, 248)
 layout_mode = 2
 
 [node name="CreateVBox" type="VBoxContainer" parent="Margin/Layout/Sidebar/SidebarVBox/CreatePanel"]
@@ -149,6 +149,25 @@ min_value = 2.0
 max_value = 12.0
 step = 1.0
 value = 4.0
+prefix = "Players: "
+
+[node name="DurationInput" type="SpinBox" parent="Margin/Layout/Sidebar/SidebarVBox/CreatePanel/CreateVBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 40)
+min_value = 1.0
+max_value = 15.0
+step = 1.0
+value = 2.0
+prefix = "Minutes: "
+
+[node name="ScoreLimitInput" type="SpinBox" parent="Margin/Layout/Sidebar/SidebarVBox/CreatePanel/CreateVBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 40)
+min_value = 1.0
+max_value = 20.0
+step = 1.0
+value = 5.0
+prefix = "Goal Limit: "
 
 [node name="RefreshButton" type="Button" parent="Margin/Layout/Sidebar/SidebarVBox"]
 layout_mode = 2

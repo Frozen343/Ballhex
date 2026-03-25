@@ -42,6 +42,8 @@ app.post("/api/lobbies", (req, res) => {
     id,
     name: sanitizeLobbyName(req.body?.name),
     maxPlayers: sanitizeMaxPlayers(req.body?.maxPlayers),
+    matchDurationSeconds: sanitizeMatchDurationSeconds(req.body?.matchDurationSeconds),
+    scoreLimit: sanitizeScoreLimit(req.body?.scoreLimit),
     createdAt: new Date().toISOString(),
     createdAtMs: Date.now(),
     hostSocket: null,
@@ -220,6 +222,22 @@ function sanitizeMaxPlayers(value) {
   return Math.max(2, Math.min(12, Math.floor(numeric)));
 }
 
+function sanitizeMatchDurationSeconds(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 120;
+  }
+  return Math.max(60, Math.min(900, Math.floor(numeric)));
+}
+
+function sanitizeScoreLimit(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 5;
+  }
+  return Math.max(1, Math.min(20, Math.floor(numeric)));
+}
+
 function randomTwoDigit() {
   return Math.floor(Math.random() * 90 + 10);
 }
@@ -230,7 +248,9 @@ function serializeLobby(lobby) {
     name: lobby.name,
     createdAt: lobby.createdAt,
     playerCount: 1 + lobby.guestSockets.size,
-    maxPlayers: lobby.maxPlayers
+    maxPlayers: lobby.maxPlayers,
+    matchDurationSeconds: lobby.matchDurationSeconds,
+    scoreLimit: lobby.scoreLimit
   };
 }
 

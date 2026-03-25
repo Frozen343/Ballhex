@@ -8,6 +8,11 @@ const WALL_THICKNESS := 40.0
 const PLAYER_RADIUS := 28.0
 const BALL_RADIUS := 16.0
 const MATCH_DURATION_SECONDS := 120.0
+const DEFAULT_SCORE_LIMIT := 5
+const MIN_MATCH_DURATION_SECONDS := 60.0
+const MAX_MATCH_DURATION_SECONDS := 900.0
+const MIN_SCORE_LIMIT := 1
+const MAX_SCORE_LIMIT := 20
 const GOAL_PAUSE_DURATION := 2.0
 const KICKOFF_COUNTDOWN := 3
 const COUNTDOWN_STEP_DURATION := 0.75
@@ -34,12 +39,14 @@ const INPUT_BINDINGS := {
 	"p1_right": [KEY_D],
 	"p1_kick": [KEY_SPACE],
 	"p1_dash": [KEY_SHIFT],
+	"p1_power_shot": [KEY_X],
 	"p2_up": [KEY_UP],
 	"p2_down": [KEY_DOWN],
 	"p2_left": [KEY_LEFT],
 	"p2_right": [KEY_RIGHT],
 	"p2_kick": [KEY_PERIOD],
 	"p2_dash": [KEY_SLASH],
+	"p2_power_shot": [KEY_COMMA],
 	"pause": [KEY_ESCAPE],
 	"hard_pause": [KEY_P],
 	"accept": [KEY_ENTER],
