@@ -2,17 +2,13 @@ extends CharacterBody2D
 class_name MatchBall
 
 @export var radius := GameSettings.BALL_RADIUS
-@export var max_speed := 750.0
-@export var drag := 155.0
-@export var wall_bounce := 0.64
-@export var player_hit_multiplier := 0.22
-@export var kick_impulse_multiplier := 1.08
-@export var min_contact_push := 8.0
-@export var max_contact_push := 26.0
-@export var player_recoil_strength := 18.0
-@export var overlap_recovery_speed := 10.0
-@export var carry_factor := 0.18
-@export var tangent_carry_factor := 0.08
+@export var max_speed := 920.0
+@export var ball_mass := 3.35
+@export var ground_friction := 112.0
+@export var wall_bounce := 0.84
+@export var player_restitution := 0.18
+@export var player_contact_friction := 0.05
+@export var kick_impulse_multiplier := 1.0
 
 @onready var collision_shape: CollisionShape2D = $CollisionShape2D
 
@@ -32,8 +28,9 @@ const NET_SNAP_THRESHOLD := 200.0
 
 func _ready() -> void:
 	collision_layer = 4
-	collision_mask = 1 | 2
+	collision_mask = 1
 	safe_margin = 0.02
+	process_physics_priority = 10
 	spawn_position = position
 	var shape := CircleShape2D.new()
 	shape.radius = radius
@@ -44,7 +41,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	if not active:
 		return
-	# Client tarafında fizik çalıştırma — state host'tan gelecek
+	# Client tarafinda fizik calistirma, state host'tan gelecek
 	if NetworkManager.is_online and not NetworkManager.is_host():
 		if _net_interpolating:
 			var lerp_factor := clampf(NET_INTERP_SPEED * delta, 0.0, 1.0)
@@ -53,10 +50,16 @@ func _physics_process(delta: float) -> void:
 			_net_target_position += _net_target_velocity * delta
 		return
 
-	velocity = velocity.move_toward(Vector2.ZERO, drag * delta)
-	velocity = velocity.limit_length(max_speed)
+	velocity = MomentumPhysics2D.apply_surface_friction(
+		velocity,
+		ground_friction,
+		ball_mass,
+		delta,
+		0.03
+	)
+	velocity = MomentumPhysics2D.clamp_total_speed(velocity, max_speed)
 	_move_with_bounce(delta)
-	_resolve_player_overlaps(delta)
+	_resolve_player_collisions()
 	_constrain_ball_to_field()
 
 
@@ -71,7 +74,7 @@ func set_ball_motion_enabled(value: bool) -> void:
 
 
 func reset_ball(reset_position: Vector2 = Vector2.ZERO) -> void:
-	self.position = reset_position
+	position = reset_position
 	spawn_position = reset_position
 	velocity = Vector2.ZERO
 	last_touch_player_id = -1
@@ -86,105 +89,62 @@ func apply_kick_impulse(direction: Vector2, strength: float, player: HexPlayer) 
 	if direction.length_squared() <= 0.0:
 		return
 	_set_last_touch(player)
-	velocity = direction.normalized() * minf(strength, max_speed) * kick_impulse_multiplier
-	velocity = velocity.limit_length(max_speed)
+	var shot_impulse := direction.normalized() * strength * kick_impulse_multiplier
+	velocity = MomentumPhysics2D.apply_impulse(velocity, shot_impulse, ball_mass)
+	velocity = MomentumPhysics2D.clamp_total_speed(velocity, max_speed)
 
 
 func _move_with_bounce(delta: float) -> void:
 	var remaining_motion := velocity * delta
 	var iteration := 0
-	var prev_bounce_normal := Vector2.ZERO
-	while iteration < 6 and remaining_motion.length_squared() > 0.0001:
-		var collision := move_and_collide(remaining_motion)
+	while iteration < 5 and remaining_motion.length_squared() > 0.0001:
+		var collision: KinematicCollision2D = move_and_collide(remaining_motion)
 		if collision == null:
 			break
-		var collider := collision.get_collider()
-		if collider is HexPlayer:
-			var player := collider as HexPlayer
-			_handle_player_collision(collision, player)
-			var normal := collision.get_normal()
-			if velocity.dot(normal) > 10.0:
-				remaining_motion = velocity.normalized() * collision.get_remainder().length()
-			else:
-				remaining_motion = collision.get_remainder().slide(normal) * 0.18
-			prev_bounce_normal = Vector2.ZERO
-		else:
-			var bounce_normal := collision.get_normal()
-			# Köşe algılama: iki ardışık normal ~90° ise topu sahaya doğru it
-			if prev_bounce_normal.length_squared() > 0.5 and absf(bounce_normal.dot(prev_bounce_normal)) < 0.3:
-				var escape_dir := (bounce_normal + prev_bounce_normal).normalized()
-				position += escape_dir * 6.0
-				velocity = escape_dir * velocity.length() * wall_bounce
-				prev_bounce_normal = Vector2.ZERO
-				remaining_motion = velocity * delta * 0.2
-			else:
-				position += bounce_normal * 1.2
-				velocity = velocity.bounce(bounce_normal) * wall_bounce
-				prev_bounce_normal = bounce_normal
-				remaining_motion = velocity * delta * 0.26
-			if velocity.length() < 18.0:
-				velocity = Vector2.ZERO
-				break
+		var bounce_normal: Vector2 = collision.get_normal()
+		position += bounce_normal * 0.8
+		velocity = MomentumPhysics2D.bounce_velocity(velocity, bounce_normal, wall_bounce)
+		remaining_motion = velocity * delta * 0.32
 		iteration += 1
 
 
-func _resolve_player_overlaps(delta: float) -> void:
+func _resolve_player_collisions() -> void:
 	for player in _tracked_players:
 		if player == null:
 			continue
 		if not player.is_field_active():
 			continue
-		var offset := position - player.position
-		var distance := offset.length()
 		var minimum_distance := radius + player.body_radius
-		if distance >= minimum_distance:
+		if position.distance_squared_to(player.position) >= minimum_distance * minimum_distance:
 			continue
 
-		var normal := Vector2.RIGHT
-		if distance > 0.001:
-			normal = offset / distance
-		elif player.facing_direction.length_squared() > 0.0:
-			normal = player.facing_direction.normalized()
+		var collision_result: MomentumPhysics2D.CollisionResult2D = MomentumPhysics2D.resolve_circle_collision(
+			position,
+			velocity,
+			ball_mass,
+			radius,
+			player.position,
+			player.velocity,
+			player.body_mass,
+			player.body_radius,
+			player_restitution,
+			player_contact_friction,
+			0.04
+		)
+		if not collision_result.collided:
+			continue
 
-		var correction := minimum_distance - distance
-		var ball_pos_before := position
-		position += normal * correction
+		position = collision_result.position_a
+		velocity = MomentumPhysics2D.clamp_total_speed(collision_result.velocity_a, max_speed)
+		player.position = collision_result.position_b
+		player.velocity = collision_result.velocity_b
 		_constrain_ball_to_field()
-		# Top duvar yüzünden tam correction yapamadıysa, oyuncuyu geri it
-		var actual_ball_move := (position - ball_pos_before).dot(normal)
-		var remaining := correction - actual_ball_move
-		if remaining > 0.5:
-			player.position -= normal * remaining
-		var player_speed := player.velocity.length()
-		var approach_speed := maxf(player.velocity.dot(normal), 0.0)
-		var tangent_velocity := player.velocity - normal * player.velocity.dot(normal)
-		var contact_push := clampf(min_contact_push + approach_speed * player_hit_multiplier, min_contact_push, max_contact_push)
-		velocity += normal * contact_push
-		velocity += tangent_velocity * tangent_carry_factor * delta * overlap_recovery_speed
-		if player_speed > 0.0 and approach_speed > 0.0:
-			velocity += normal * approach_speed * carry_factor * delta * 4.0
-		velocity = velocity.limit_length(max_speed)
+		_set_last_touch(player)
 
 
 func _set_last_touch(player: HexPlayer) -> void:
 	last_touch_player_id = player.player_id
 	last_touch_team_id = player.team_id
-
-
-func _handle_player_collision(collision: KinematicCollision2D, player: HexPlayer) -> void:
-	var normal := collision.get_normal()
-	var forward_speed := maxf(player.velocity.dot(normal), 0.0)
-	var tangent_velocity := player.velocity - normal * player.velocity.dot(normal)
-	var contact_push := clampf(min_contact_push + forward_speed * player_hit_multiplier, min_contact_push, max_contact_push)
-	position += normal * 0.75
-	
-	var outward_speed := velocity.dot(normal)
-	velocity = velocity.slide(normal) * 0.9 + normal * maxf(contact_push, outward_speed)
-	
-	velocity += tangent_velocity * tangent_carry_factor
-	velocity = velocity.limit_length(max_speed)
-	player.apply_ball_recoil(-normal * minf(contact_push, player_recoil_strength))
-	_set_last_touch(player)
 
 
 func _draw() -> void:
@@ -200,10 +160,8 @@ func _constrain_ball_to_field() -> void:
 	var mouth_half := GameSettings.GOAL_MOUTH_HEIGHT * 0.5
 	var margin := radius + 2.0
 
-	# Üst/alt sınır: her zaman saha içinde kal
 	position.y = clampf(position.y, -half_field.y + margin, half_field.y - margin)
 
-	# Sol/sağ sınır: kale ağzı yüksekliğinde ise goal_depth kadar dışarı çıkabilir
 	var in_goal_mouth := absf(position.y) < mouth_half
 	if in_goal_mouth:
 		position.x = clampf(position.x, -half_field.x - goal_depth + margin, half_field.x + goal_depth - margin)
@@ -230,7 +188,6 @@ func apply_net_state(state: Dictionary) -> void:
 	last_touch_player_id = state["ltp"]
 	last_touch_team_id = state["ltt"]
 
-	# If distance is too large (teleport/reset) or ball just became active, snap
 	if position.distance_to(target_pos) > NET_SNAP_THRESHOLD or not active:
 		position = target_pos
 		velocity = target_vel

@@ -6,16 +6,16 @@ signal kick_attempted(player: HexPlayer)
 @export var player_id := 1
 @export var team_id := GameEnums.TeamId.RED
 @export var display_name := "P1"
-@export var move_speed := 195.0
-@export var acceleration := 650.0
-@export var deceleration := 420.0
+@export var move_speed := 138.0
+@export var drive_force := 11000.0
+@export var ground_friction := 138.0
+@export var body_mass := 6.0
+@export var body_restitution := 0.12
+@export var body_contact_friction := 0.18
 @export var facing_turn_speed := 12.0
-@export var kick_strength := 380.0
-@export var kick_contact_margin := 6.0
-@export var body_push_strength := 60.0
+@export var kick_strength := 840.0
+@export var kick_contact_margin := 7.0
 @export var body_radius := GameSettings.PLAYER_RADIUS
-@export var ball_recoil_factor := 0.1
-@export var player_push_transfer := 0.88
 @export var out_of_bounds_margin := 80.0
 
 @onready var collision_shape: CollisionShape2D = $CollisionShape2D
@@ -87,9 +87,10 @@ func _physics_process(delta: float) -> void:
 	var previous_facing := facing_direction
 	var previous_flash := _kick_flash_strength
 	_kick_flash_strength = move_toward(_kick_flash_strength, 0.0, delta * 4.5)
+	var input_direction := Vector2.ZERO
 
 	if input_enabled:
-		var input_direction := _get_effective_input()
+		input_direction = _get_effective_input()
 		if input_direction.length_squared() > 0.0:
 			var target_facing := input_direction.normalized()
 			var current_angle := facing_direction.angle()
@@ -105,25 +106,31 @@ func _physics_process(delta: float) -> void:
 		if kick_pressed:
 			_trigger_kick_flash()
 			_attempt_kick(input_direction)
-		velocity = VelocityMotor2D.update_velocity(
+		velocity = MomentumPhysics2D.apply_drive_force(
 			velocity,
 			input_direction,
-			move_speed,
-			acceleration,
-			deceleration,
+			drive_force,
+			body_mass,
 			delta
 		)
+		velocity = MomentumPhysics2D.clamp_speed_along_direction(velocity, input_direction, move_speed)
+		velocity = MomentumPhysics2D.clamp_total_speed(velocity, move_speed)
+
+	velocity = MomentumPhysics2D.apply_surface_friction(
+		velocity,
+		ground_friction,
+		body_mass,
+		delta,
+		0.08
+	)
+	if input_enabled:
+		velocity = MomentumPhysics2D.clamp_total_speed(velocity, move_speed)
+
+	if velocity.length_squared() > 0.0001 or input_direction.length_squared() > 0.0:
 		move_and_slide()
 		_resolve_player_overlaps()
 		_constrain_to_pitch()
 		_constrain_to_kickoff_zone()
-	else:
-		velocity = velocity.move_toward(Vector2.ZERO, deceleration * delta)
-		if velocity.length_squared() > 0.001:
-			move_and_slide()
-			_resolve_player_overlaps()
-			_constrain_to_pitch()
-			_constrain_to_kickoff_zone()
 
 	if previous_facing != facing_direction or absf(previous_flash - _kick_flash_strength) > 0.001:
 		needs_redraw = true
@@ -288,7 +295,8 @@ func _attempt_kick(input_direction: Vector2) -> void:
 	elif to_ball.length_squared() > 0.0:
 		kick_direction = to_ball.normalized()
 
-	kick_direction = (kick_direction + to_ball.normalized() * 0.65).normalized()
+	if to_ball.length_squared() > 0.0:
+		kick_direction = (kick_direction + to_ball.normalized() * 0.18).normalized()
 	_ball.apply_kick_impulse(kick_direction, kick_strength, self)
 	kick_cooldown.trigger()
 	GameEvents.emit_ball_kicked(player_id, team_id)
@@ -347,7 +355,7 @@ func _build_initials() -> String:
 
 
 func apply_ball_recoil(impulse: Vector2) -> void:
-	velocity += impulse * ball_recoil_factor
+	velocity = MomentumPhysics2D.apply_impulse(velocity, impulse, body_mass)
 
 
 func _trigger_kick_flash() -> void:
@@ -366,37 +374,30 @@ func _resolve_player_overlaps() -> void:
 			continue
 
 		var offset := other.position - position
-		var distance := offset.length()
 		var minimum_distance := body_radius + other.body_radius
-		if distance >= minimum_distance:
+		if offset.length_squared() >= minimum_distance * minimum_distance:
 			continue
 
-		var normal := Vector2.RIGHT
-		if distance > 0.001:
-			normal = offset / distance
-		elif other.facing_direction.length_squared() > 0.01:
-			normal = other.facing_direction.normalized()
+		var collision_result: MomentumPhysics2D.CollisionResult2D = MomentumPhysics2D.resolve_circle_collision(
+			position,
+			velocity,
+			body_mass,
+			body_radius,
+			other.position,
+			other.velocity,
+			other.body_mass,
+			other.body_radius,
+			minf(body_restitution, other.body_restitution),
+			maxf(body_contact_friction, other.body_contact_friction),
+			0.08
+		)
+		if not collision_result.collided:
+			continue
 
-		var correction := (minimum_distance - distance) * 0.5
-		position -= normal * correction
-		other.position += normal * correction
-
-		var self_along := velocity.dot(normal)
-		var other_along := other.velocity.dot(normal)
-		var self_pushing := self_along > 0.0
-		var other_pushing := other_along < 0.0
-
-		if self_pushing and other_pushing:
-			velocity -= normal * self_along
-			other.velocity -= normal * other_along
-		elif self_pushing:
-			var transfer_self := self_along * player_push_transfer
-			velocity -= normal * transfer_self * 0.5
-			other.velocity += normal * transfer_self * 0.5
-		elif other_pushing:
-			var transfer_other := absf(other_along) * other.player_push_transfer
-			other.velocity -= normal * (-transfer_other * 0.5)
-			velocity -= normal * transfer_other * 0.5
+		position = collision_result.position_a
+		velocity = collision_result.velocity_a
+		other.position = collision_result.position_b
+		other.velocity = collision_result.velocity_b
 
 
 func set_kickoff_restricted(value: bool) -> void:

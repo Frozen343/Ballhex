@@ -1,9 +1,6 @@
 res://Scenes/Entities/Ball/Ball.gd
 res://Scenes/Entities/Player/Player.gd
-res://Scenes/Systems/MatchManager/MatchManager.gd
-res://Scenes/App/App.gd
-res://Scenes/Match/Match.gd
-res://Scenes/Menus/PauseMenu.gd
-res://Scenes/UI/Hud/MatchHUD.gd
-res://Scenes/UI/Hud/MatchHUD.tscn
 res://Autoload/GameSettings.gd
+res://Scenes/Entities/Ball/Ball.tscn
+res://Scenes/Systems/MatchManager/MatchManager.gd
+res://Scenes/Entities/Player/Player.tscn

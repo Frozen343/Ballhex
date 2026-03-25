@@ -1,16 +1,16 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene format=3 uid="uid://dxd700j1jvjme"]
 
-[ext_resource type="Script" path="res://Scenes/Entities/Player/Player.gd" id="1"]
-[ext_resource type="Script" path="res://Scripts/Components/CooldownComponent.gd" id="2"]
+[ext_resource type="Script" uid="uid://dt6dut3f8fbhi" path="res://Scenes/Entities/Player/Player.gd" id="1"]
+[ext_resource type="Script" uid="uid://cabeja7j8r5vs" path="res://Scripts/Components/CooldownComponent.gd" id="2"]
 
-[node name="Player" type="CharacterBody2D"]
+[node name="Player" type="CharacterBody2D" unique_id=1925644803]
 script = ExtResource("1")
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=439673114]
 
-[node name="KickCooldown" type="Node" parent="."]
+[node name="KickCooldown" type="Node" parent="." unique_id=492039089]
 script = ExtResource("2")
 
-[node name="InitialsLabel" type="Label" parent="."]
+[node name="InitialsLabel" type="Label" parent="." unique_id=936761923]
 
-[node name="NameLabel" type="Label" parent="."]
+[node name="NameLabel" type="Label" parent="." unique_id=444366247]
