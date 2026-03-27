@@ -14,6 +14,7 @@ signal player_left(player_name: String)
 signal chat_message_received(sender_name: String, message: String)
 
 const PLAYER_SCENE := preload("res://Scenes/Entities/Player/Player.tscn")
+const ICE_SHARD_SCENE := preload("res://Scenes/Entities/IceShard/IceShard.tscn")
 const WORLD_SYNC_INTERVAL := 0.05
 const DEFAULT_GOAL_RESET_DELAY := 1.6
 const LOCAL_ROOM_NAME := "Local Match"
@@ -33,6 +34,7 @@ var _match_over := false
 var _result_title := ""
 var _result_detail := ""
 var _field_players: Dictionary = {}
+var _ice_shards: Dictionary = {}
 var _roster: Dictionary = {}
 var _banned_names: Dictionary = {}
 var _goal_reset_remaining := -1.0
@@ -45,6 +47,7 @@ var _overtime_active := false
 var _match_started := true
 var _match_duration_seconds := GameSettings.MATCH_DURATION_SECONDS
 var _score_limit := GameSettings.DEFAULT_SCORE_LIMIT
+var _next_ice_shard_id := 1
 
 
 func _ready() -> void:
@@ -54,6 +57,9 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _is_authority():
+		_prune_ice_shards()
+
 	if not _hard_paused and _goal_reset_remaining >= 0.0:
 		_goal_reset_remaining -= delta
 		if _goal_reset_remaining <= 0.0:
@@ -76,6 +82,7 @@ func _process(delta: float) -> void:
 
 
 func start_new_match() -> void:
+	_clear_ice_shards()
 	_match_started = true
 	_match_over = false
 	_result_title = ""
@@ -111,6 +118,7 @@ func start_new_match() -> void:
 
 
 func enter_lobby_setup() -> void:
+	_clear_ice_shards()
 	_match_started = false
 	_match_over = false
 	_result_title = ""
@@ -197,6 +205,7 @@ func force_full_reset() -> void:
 	if not _is_authority():
 		return
 
+	_clear_ice_shards()
 	var active_players := _get_active_players()
 	for player in active_players:
 		if player == null:
@@ -479,6 +488,7 @@ func _connect_core_signals() -> void:
 
 
 func _clear_legacy_players() -> void:
+	_clear_ice_shards()
 	for child in entities_root.get_children():
 		if child is HexPlayer:
 			child.queue_free()
@@ -639,11 +649,13 @@ func _update_field_player_from_roster(peer_id: int, reposition: bool) -> void:
 		entities_root.add_child(player)
 		_field_players[peer_id] = player
 		player.assign_ball(ball)
+		player.set_match_manager(self)
 		created = true
 
 	player.player_id = peer_id
 	var previous_team := player.team_id
 	player.team_id = team_id as GameEnums.TeamId
+	player.set_match_manager(self)
 	player.set_controller_peer_id(peer_id)
 	player.set_display_name(str(entry.get("name", "Player")))
 	player.set_field_active(true)
@@ -665,6 +677,7 @@ func _remove_field_player(peer_id: int) -> void:
 		player.get_parent().remove_child(player)
 	player.queue_free()
 	_field_players.erase(peer_id)
+	_refresh_ball_player_tracking()
 
 
 func _remove_all_field_players() -> void:
@@ -679,7 +692,46 @@ func _remove_all_field_players() -> void:
 
 
 func _refresh_ball_player_tracking() -> void:
-	ball.register_players(_get_active_players())
+	var active_players := _get_active_players()
+	ball.register_players(active_players)
+	for shard in _ice_shards.values():
+		var ice_shard := shard as IceShard
+		if ice_shard != null:
+			ice_shard.register_players(active_players)
+
+
+func spawn_ice_shard(owner: HexPlayer, direction: Vector2, speed: float, lifetime: float, effect_duration: float, projectile_radius: float) -> void:
+	if not _is_authority() or owner == null:
+		return
+	var ice_shard := ICE_SHARD_SCENE.instantiate() as IceShard
+	var shard_id := _next_ice_shard_id
+	_next_ice_shard_id += 1
+	ice_shard.name = "IceShard_%d" % shard_id
+	entities_root.add_child(ice_shard)
+	ice_shard.launch(owner, direction, speed, lifetime, effect_duration, projectile_radius, shard_id)
+	ice_shard.register_players(_get_active_players())
+	_ice_shards[shard_id] = ice_shard
+
+
+func _clear_ice_shards() -> void:
+	for shard_id in _ice_shards.keys():
+		var shard := _ice_shards[shard_id] as IceShard
+		if shard != null:
+			shard.queue_free()
+	_ice_shards.clear()
+
+
+func _prune_ice_shards() -> void:
+	var expired_ids: Array[int] = []
+	for shard_id in _ice_shards.keys():
+		var ice_shard := _ice_shards[shard_id] as IceShard
+		if ice_shard == null or ice_shard.is_expired():
+			expired_ids.append(int(shard_id))
+	for shard_id in expired_ids:
+		var shard := _ice_shards.get(shard_id) as IceShard
+		if shard != null:
+			shard.queue_free()
+		_ice_shards.erase(shard_id)
 
 
 func _get_active_players() -> Array[HexPlayer]:
@@ -747,6 +799,10 @@ func _configure_match_activity(active: bool) -> void:
 		if player != null:
 			player.set_input_enabled(active)
 	ball.set_ball_motion_enabled(active)
+	for shard in _ice_shards.values():
+		var ice_shard := shard as IceShard
+		if ice_shard != null:
+			ice_shard.set_simulation_enabled(active)
 
 
 func _apply_simulation_state() -> void:
@@ -972,6 +1028,7 @@ func _broadcast_world_state() -> void:
 
 	var snapshot := {
 		"players": players,
+		"shards": _build_ice_shard_states(),
 		"ball": ball.build_net_state(),
 		"rs": red_score,
 		"bs": blue_score,
@@ -1047,6 +1104,12 @@ func _apply_world_state_snapshot(snapshot: Dictionary) -> void:
 	if typeof(raw_players) == TYPE_ARRAY:
 		players = raw_players
 	_reconcile_remote_players(players)
+
+	var shards: Array = []
+	var raw_shards: Variant = snapshot.get("shards", [])
+	if typeof(raw_shards) == TYPE_ARRAY:
+		shards = raw_shards
+	_reconcile_remote_ice_shards(shards)
 
 	var ball_state: Dictionary = {}
 	var raw_ball_state: Variant = snapshot.get("ball", {})
@@ -1242,9 +1305,53 @@ func _on_network_peer_disconnected(peer_id: int) -> void:
 
 
 func _on_network_server_disconnected() -> void:
+	_clear_ice_shards()
 	_remove_all_field_players()
 	_roster.clear()
 	_refresh_ball_player_tracking()
+
+
+func _build_ice_shard_states() -> Array:
+	var shard_states: Array = []
+	var shard_ids := _ice_shards.keys()
+	shard_ids.sort()
+	for shard_id in shard_ids:
+		var ice_shard := _ice_shards[shard_id] as IceShard
+		if ice_shard == null or ice_shard.is_expired():
+			continue
+		shard_states.append(ice_shard.build_net_state())
+	return shard_states
+
+
+func _reconcile_remote_ice_shards(shards: Variant) -> void:
+	if typeof(shards) != TYPE_ARRAY:
+		return
+
+	var active_ids: Array[int] = []
+	for shard_data in shards:
+		if typeof(shard_data) != TYPE_DICTIONARY:
+			continue
+		var shard_id := int(shard_data.get("id", -1))
+		if shard_id < 0:
+			continue
+		active_ids.append(shard_id)
+		var ice_shard := _ice_shards.get(shard_id) as IceShard
+		if ice_shard == null:
+			ice_shard = ICE_SHARD_SCENE.instantiate() as IceShard
+			ice_shard.name = "IceShard_%d" % shard_id
+			entities_root.add_child(ice_shard)
+			_ice_shards[shard_id] = ice_shard
+			ice_shard.register_players(_get_active_players())
+		ice_shard.apply_net_state(shard_data)
+
+	var shard_ids := _ice_shards.keys()
+	for shard_id in shard_ids:
+		if active_ids.has(int(shard_id)):
+			continue
+		var ice_shard := _ice_shards[shard_id] as IceShard
+		if ice_shard != null:
+			ice_shard.queue_free()
+		_ice_shards.erase(shard_id)
 
 
 func _has_reached_score_limit() -> bool:
@@ -1255,6 +1362,7 @@ func _finish_match(detail_prefix: String, announcement_text: String) -> void:
 	_match_over = true
 	_overtime_active = false
 	_hard_paused = false
+	_clear_ice_shards()
 	hard_pause_changed.emit(false)
 	_result_title = Helpers.winner_text(red_score, blue_score)
 	_result_detail = "Red %d - %d Blue" % [red_score, blue_score]

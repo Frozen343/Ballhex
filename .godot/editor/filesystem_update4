@@ -1,0 +1,6 @@
+res://Autoload/GameSettings.gd
+res://Scenes/Entities/Ball/Ball.gd
+res://Scenes/Entities/Player/Player.gd
+res://Scenes/Entities/Player/Player.tscn
+res://Scenes/Systems/Input/InputProfiles.gd
+res://Scenes/Systems/MatchManager/MatchManager.gd

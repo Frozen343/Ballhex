@@ -57,6 +57,7 @@ func _physics_process(delta: float) -> void:
 		delta,
 		0.03
 	)
+	_apply_player_skill_forces(delta)
 	velocity = MomentumPhysics2D.clamp_total_speed(velocity, max_speed)
 	_move_with_bounce(delta)
 	_resolve_player_collisions()
@@ -104,6 +105,23 @@ func apply_power_shot(direction: Vector2, player: HexPlayer) -> void:
 	velocity = MomentumPhysics2D.clamp_total_speed(velocity, max_speed)
 
 
+func apply_magnet_pull(player: HexPlayer, delta: float, pull_radius: float, pull_force: float) -> void:
+	if player == null or not player.is_field_active():
+		return
+	var to_player := player.position - position
+	var distance := to_player.length()
+	if distance <= 0.001 or distance > pull_radius:
+		return
+	if distance <= player.body_radius + radius + 12.0:
+		return
+	if _is_magnet_pull_blocked(player):
+		return
+
+	var pull_impulse := to_player.normalized() * pull_force * delta
+	velocity = MomentumPhysics2D.apply_impulse(velocity, pull_impulse, ball_mass)
+	velocity = MomentumPhysics2D.clamp_total_speed(velocity, max_speed)
+
+
 func _move_with_bounce(delta: float) -> void:
 	var remaining_motion := velocity * delta
 	var iteration := 0
@@ -116,6 +134,15 @@ func _move_with_bounce(delta: float) -> void:
 		velocity = MomentumPhysics2D.bounce_velocity(velocity, bounce_normal, wall_bounce)
 		remaining_motion = velocity * delta * 0.32
 		iteration += 1
+
+
+func _apply_player_skill_forces(delta: float) -> void:
+	for player in _tracked_players:
+		if player == null:
+			continue
+		if not player.is_magnet_active():
+			continue
+		apply_magnet_pull(player, delta, player.magnet_radius, player.magnet_pull_force)
 
 
 func _resolve_player_collisions() -> void:
@@ -155,6 +182,27 @@ func _resolve_player_collisions() -> void:
 func _set_last_touch(player: HexPlayer) -> void:
 	last_touch_player_id = player.player_id
 	last_touch_team_id = player.team_id
+
+
+func _is_magnet_pull_blocked(source_player: HexPlayer) -> bool:
+	var segment_start := position
+	var segment_end := source_player.position
+	var segment := segment_end - segment_start
+	var segment_length_squared := segment.length_squared()
+	if segment_length_squared <= 0.001:
+		return false
+
+	for other in _tracked_players:
+		if other == null or other == source_player:
+			continue
+		if not other.is_field_active():
+			continue
+		var projection := clampf((other.position - segment_start).dot(segment) / segment_length_squared, 0.0, 1.0)
+		var closest_point := segment_start + segment * projection
+		var block_radius := other.body_radius + radius * 0.6
+		if other.position.distance_squared_to(closest_point) <= block_radius * block_radius:
+			return true
+	return false
 
 
 func _draw() -> void:
