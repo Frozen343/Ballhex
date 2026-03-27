@@ -7,8 +7,6 @@ class_name MainMenu
 @onready var columns_label: Label = $Margin/Layout/ListPanel/Margin/VBox/Columns
 @onready var lobby_name_input: LineEdit = $Margin/Layout/Sidebar/SidebarVBox/CreatePanel/CreateVBox/LobbyNameInput
 @onready var max_players_input: SpinBox = $Margin/Layout/Sidebar/SidebarVBox/CreatePanel/CreateVBox/MaxPlayersInput
-@onready var duration_input: SpinBox = $Margin/Layout/Sidebar/SidebarVBox/CreatePanel/CreateVBox/DurationInput
-@onready var score_limit_input: SpinBox = $Margin/Layout/Sidebar/SidebarVBox/CreatePanel/CreateVBox/ScoreLimitInput
 @onready var refresh_button: Button = $Margin/Layout/Sidebar/SidebarVBox/RefreshButton
 @onready var join_button: Button = $Margin/Layout/Sidebar/SidebarVBox/JoinButton
 @onready var create_button: Button = $Margin/Layout/Sidebar/SidebarVBox/CreateButton
@@ -54,9 +52,7 @@ func _on_host_pressed() -> void:
 		var error := NetworkManager.host_game(
 			NetworkManager.DEFAULT_PORT,
 			lobby_name_input.text,
-			int(max_players_input.value),
-			duration_input.value * 60.0,
-			int(score_limit_input.value)
+			int(max_players_input.value)
 		)
 		if error != OK:
 			status_label.text = "Could not host room."
@@ -70,9 +66,7 @@ func _on_host_pressed() -> void:
 	NetworkManager.host_game(
 		NetworkManager.DEFAULT_PORT,
 		lobby_name_input.text,
-		int(max_players_input.value),
-		duration_input.value * 60.0,
-		int(score_limit_input.value)
+		int(max_players_input.value)
 	)
 
 
@@ -205,8 +199,6 @@ func _set_buttons_enabled(enabled: bool) -> void:
 	quit_button.disabled = not enabled
 	lobby_name_input.editable = enabled
 	max_players_input.editable = enabled
-	duration_input.editable = enabled
-	score_limit_input.editable = enabled
 
 
 func _exit_tree() -> void:

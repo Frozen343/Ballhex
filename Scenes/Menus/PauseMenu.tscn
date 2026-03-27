@@ -102,6 +102,30 @@ text = "Score: Red 0 - 0 Blue"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 24
 
+[node name="RulesRow" type="HBoxContainer" parent="Backdrop/Card/Margin/Layout/Body"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="DurationInput" type="SpinBox" parent="Backdrop/Card/Margin/Layout/Body/RulesRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 40)
+min_value = 1.0
+max_value = 15.0
+step = 1.0
+value = 2.0
+prefix = "Minutes: "
+
+[node name="ScoreLimitInput" type="SpinBox" parent="Backdrop/Card/Margin/Layout/Body/RulesRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 40)
+min_value = 1.0
+max_value = 20.0
+step = 1.0
+value = 5.0
+prefix = "Goal Limit: "
+
 [node name="Columns" type="HBoxContainer" parent="Backdrop/Card/Margin/Layout/Body"]
 layout_mode = 2
 size_flags_vertical = 3

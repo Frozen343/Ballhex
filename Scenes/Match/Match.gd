@@ -15,7 +15,12 @@ func _ready() -> void:
 	pause_menu.hide_panel()
 	end_match_panel.visible = false
 	debug_overlay.set_visible(GameSettings.debug_overlay_enabled)
-	match_manager.start_new_match()
+	if NetworkManager.is_online:
+		match_manager.enter_lobby_setup()
+		if NetworkManager.is_host():
+			pause_menu.show_panel()
+	else:
+		match_manager.start_new_match()
 
 
 func _process(_delta: float) -> void:
@@ -89,6 +94,7 @@ func _connect_ui() -> void:
 	pause_menu.toggle_admin_requested.connect(match_manager.toggle_peer_admin)
 	pause_menu.chat_submitted.connect(match_manager.send_chat)
 	pause_menu.randomize_teams_requested.connect(match_manager.randomize_teams)
+	pause_menu.match_rules_changed.connect(match_manager.set_match_rules)
 
 	match_hud.chat_submitted.connect(match_manager.send_chat)
 	match_hud.chat_focus_changed.connect(_on_chat_focus_changed)

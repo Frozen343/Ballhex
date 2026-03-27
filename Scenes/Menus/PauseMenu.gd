@@ -12,6 +12,7 @@ signal ban_requested(peer_id: int)
 signal toggle_admin_requested(peer_id: int)
 signal chat_submitted(message: String)
 signal randomize_teams_requested
+signal match_rules_changed(match_duration_seconds: float, score_limit: int)
 
 const ACTION_KICK := 1
 const ACTION_BAN := 2
@@ -23,6 +24,8 @@ const ACTION_TOGGLE_ADMIN := 3
 @onready var red_list: ItemList = $Backdrop/Card/Margin/Layout/Body/Columns/RedColumn/RedList
 @onready var spectators_list: ItemList = $Backdrop/Card/Margin/Layout/Body/Columns/SpectatorsColumn/SpectatorsList
 @onready var blue_list: ItemList = $Backdrop/Card/Margin/Layout/Body/Columns/BlueColumn/BlueList
+@onready var duration_input: SpinBox = $Backdrop/Card/Margin/Layout/Body/RulesRow/DurationInput
+@onready var score_limit_input: SpinBox = $Backdrop/Card/Margin/Layout/Body/RulesRow/ScoreLimitInput
 @onready var resume_button: Button = $Backdrop/Card/Margin/Layout/TopBar/Buttons/ResumeButton
 @onready var restart_button: Button = $Backdrop/Card/Margin/Layout/TopBar/Buttons/RestartButton
 @onready var menu_button: Button = $Backdrop/Card/Margin/Layout/TopBar/Buttons/MenuButton
@@ -39,8 +42,10 @@ var _entries_by_column := {
 var _selected_peer_id := -1
 var _can_manage := false
 var _match_over := false
+var _match_started := true
 var _local_peer_id := 1
 var _randomize_button: Button
+var _updating_rule_inputs := false
 
 
 func _ready() -> void:
@@ -50,6 +55,8 @@ func _ready() -> void:
 	send_red_button.pressed.connect(_on_send_red_pressed)
 	send_spectators_button.pressed.connect(_on_send_spectators_pressed)
 	send_blue_button.pressed.connect(_on_send_blue_pressed)
+	duration_input.value_changed.connect(_on_duration_changed)
+	score_limit_input.value_changed.connect(_on_score_limit_changed)
 	red_list.item_clicked.connect(_on_item_clicked.bind("red", red_list))
 	spectators_list.item_clicked.connect(_on_item_clicked.bind("spectators", spectators_list))
 	blue_list.item_clicked.connect(_on_item_clicked.bind("blue", blue_list))
@@ -63,6 +70,7 @@ func update_room_state(snapshot: Dictionary) -> void:
 	room_name_label.text = str(snapshot.get("room_name", "Room"))
 	_can_manage = bool(snapshot.get("can_manage", false))
 	_match_over = bool(snapshot.get("match_over", false))
+	_match_started = bool(snapshot.get("match_started", true))
 	_local_peer_id = int(snapshot.get("local_peer_id", 1))
 	_entries_by_column["red"] = snapshot.get("red", [])
 	_entries_by_column["spectators"] = snapshot.get("spectators", [])
@@ -71,6 +79,10 @@ func update_room_state(snapshot: Dictionary) -> void:
 	_rebuild_list(red_list, _entries_by_column["red"])
 	_rebuild_list(spectators_list, _entries_by_column["spectators"])
 	_rebuild_list(blue_list, _entries_by_column["blue"])
+	_updating_rule_inputs = true
+	duration_input.set_value_no_signal(maxf(1.0, roundf(float(snapshot.get("match_duration_seconds", GameSettings.MATCH_DURATION_SECONDS)) / 60.0)))
+	score_limit_input.set_value_no_signal(int(snapshot.get("score_limit", GameSettings.DEFAULT_SCORE_LIMIT)))
+	_updating_rule_inputs = false
 	_refresh_result_label(snapshot)
 	_refresh_button_state()
 
@@ -94,7 +106,10 @@ func _refresh_result_label(snapshot: Dictionary) -> void:
 	var overtime := bool(snapshot.get("overtime", false))
 	var result_title := str(snapshot.get("result_title", ""))
 	var result_detail := str(snapshot.get("result_detail", ""))
-	if _match_over:
+	if not _match_started and not _match_over:
+		status_label.text = "Room setup   Spectators join first, host starts the match"
+		resume_button.text = "Close"
+	elif _match_over:
 		status_label.text = "%s   %s" % [result_title, result_detail]
 		resume_button.text = "Close"
 	elif overtime:
@@ -107,16 +122,22 @@ func _refresh_result_label(snapshot: Dictionary) -> void:
 	helper_label.text = "%s   Time: %s   Goal limit: %d" % [manage_hint, Helpers.format_match_time(match_duration_seconds), score_limit]
 	restart_button.visible = _can_manage
 	restart_button.disabled = not _can_manage
+	restart_button.text = "Start Match" if not _match_started else "Restart"
 
 
 func _refresh_button_state() -> void:
 	var has_selection := _get_selected_entry().size() > 0
+	var can_edit_rules := _can_manage and not _match_started
 	send_red_button.visible = _can_manage
 	send_spectators_button.visible = _can_manage
 	send_blue_button.visible = _can_manage
 	send_red_button.disabled = not (_can_manage and has_selection)
 	send_spectators_button.disabled = not (_can_manage and has_selection)
 	send_blue_button.disabled = not (_can_manage and has_selection)
+	duration_input.editable = can_edit_rules
+	score_limit_input.editable = can_edit_rules
+	duration_input.modulate = Color(1.0, 1.0, 1.0, 1.0 if can_edit_rules else 0.72)
+	score_limit_input.modulate = Color(1.0, 1.0, 1.0, 1.0 if can_edit_rules else 0.72)
 	if _randomize_button != null:
 		_randomize_button.visible = _can_manage
 		_randomize_button.disabled = not _can_manage
@@ -224,6 +245,18 @@ func _on_send_spectators_pressed() -> void:
 func _on_send_blue_pressed() -> void:
 	if _selected_peer_id >= 0:
 		assign_blue_requested.emit(_selected_peer_id)
+
+
+func _on_duration_changed(value: float) -> void:
+	if _updating_rule_inputs:
+		return
+	match_rules_changed.emit(value * 60.0, int(score_limit_input.value))
+
+
+func _on_score_limit_changed(value: float) -> void:
+	if _updating_rule_inputs:
+		return
+	match_rules_changed.emit(duration_input.value * 60.0, int(value))
 
 
 # --- Drag and Drop ---

@@ -158,6 +158,14 @@ func refresh_lobbies() -> void:
 	_refresh_lobbies_async.call_deferred()
 
 
+func update_lobby_settings(match_duration_seconds: float, score_limit: int) -> void:
+	active_match_duration_seconds = _sanitize_match_duration_seconds(match_duration_seconds)
+	active_score_limit = _sanitize_score_limit(score_limit)
+	if not uses_web_lobbies() or not is_host_player or active_lobby_id.is_empty():
+		return
+	_update_lobby_settings_async.call_deferred(active_lobby_id, active_match_duration_seconds, active_score_limit)
+
+
 func disconnect_game() -> void:
 	_cleanup()
 
@@ -284,6 +292,22 @@ func _refresh_lobbies_async() -> void:
 	available_lobbies = lobbies
 	lobbies_updated.emit(available_lobbies)
 	matchmaking_status_changed.emit("Hazir")
+
+
+func _update_lobby_settings_async(lobby_id: String, match_duration_seconds: float, score_limit: int) -> void:
+	var response := await _request_json(
+		HTTPClient.METHOD_PATCH,
+		_build_http_url("%s/%s/settings" % [WEB_LOBBIES_PATH, lobby_id.uri_encode()]),
+		{
+			"matchDurationSeconds": match_duration_seconds,
+			"scoreLimit": score_limit
+		}
+	)
+	if not response.get("ok", false):
+		return
+	var data: Dictionary = response.get("data", {})
+	active_match_duration_seconds = _sanitize_match_duration_seconds(float(data.get("matchDurationSeconds", match_duration_seconds)))
+	active_score_limit = _sanitize_score_limit(int(data.get("scoreLimit", score_limit)))
 
 
 func _request_json(method: HTTPClient.Method, url: String, body: Dictionary = {}) -> Dictionary:

@@ -42,6 +42,7 @@ var _hard_paused := false
 var _last_scoring_team := GameEnums.TeamId.NEUTRAL
 var _kickoff_active := false
 var _overtime_active := false
+var _match_started := true
 var _match_duration_seconds := GameSettings.MATCH_DURATION_SECONDS
 var _score_limit := GameSettings.DEFAULT_SCORE_LIMIT
 
@@ -75,6 +76,7 @@ func _process(delta: float) -> void:
 
 
 func start_new_match() -> void:
+	_match_started = true
 	_match_over = false
 	_result_title = ""
 	_result_detail = ""
@@ -108,11 +110,53 @@ func start_new_match() -> void:
 	_broadcast_room_state()
 
 
+func enter_lobby_setup() -> void:
+	_match_started = false
+	_match_over = false
+	_result_title = ""
+	_result_detail = ""
+	_goal_reset_remaining = -1.0
+	_sync_accumulator = 0.0
+	red_score = 0
+	blue_score = 0
+	is_paused = true
+	_hard_paused = false
+	_last_scoring_team = GameEnums.TeamId.NEUTRAL
+	_kickoff_active = false
+	_overtime_active = false
+	_match_duration_seconds = _resolve_match_duration_seconds()
+	_score_limit = _resolve_score_limit()
+	_state_before_pause = GameEnums.MatchState.PLAYING
+	_set_state(GameEnums.MatchState.PAUSED)
+	match_finished.emit("", "")
+	pause_changed.emit(true)
+	hard_pause_changed.emit(false)
+	score_changed.emit(red_score, blue_score)
+	time_system.setup(_match_duration_seconds)
+	time_system.stop()
+	timer_changed.emit(time_system.remaining_seconds)
+	_rebuild_roster_for_current_mode()
+	ball.reset_ball(Vector2.ZERO)
+	_configure_goals(false)
+	_apply_simulation_state()
+	if not _is_authority():
+		_submit_local_name_deferred.call_deferred()
+	_broadcast_room_state()
+	_broadcast_world_state()
+
+
 func restart_match() -> void:
 	if NetworkManager.is_online and not _is_authority():
 		_rpc_request_restart_match.rpc_id(1)
 		return
 	start_new_match()
+
+
+func set_match_rules(match_duration_seconds: float, score_limit: int) -> void:
+	if NetworkManager.is_online and not _is_authority():
+		_rpc_request_match_rules.rpc_id(1, match_duration_seconds, score_limit)
+		return
+	_apply_match_rules_authority(match_duration_seconds, score_limit)
 
 
 func toggle_hard_pause() -> void:
@@ -128,7 +172,9 @@ func toggle_pause() -> void:
 		_state_before_pause = state_machine.current_state
 		_set_state(GameEnums.MatchState.PAUSED)
 	else:
-		if _match_over:
+		if not _match_started:
+			_set_state(GameEnums.MatchState.PAUSED)
+		elif _match_over:
 			_set_state(GameEnums.MatchState.MATCH_ENDED)
 		elif _goal_reset_remaining >= 0.0:
 			_set_state(GameEnums.MatchState.GOAL_SCORED)
@@ -290,6 +336,16 @@ func _rpc_request_restart_match() -> void:
 
 
 @rpc("any_peer", "reliable", "call_remote")
+func _rpc_request_match_rules(match_duration_seconds: float, score_limit: int) -> void:
+	if not _is_authority():
+		return
+	var sender_peer_id := multiplayer.get_remote_sender_id()
+	if not _can_manage_roster(sender_peer_id):
+		return
+	_apply_match_rules_authority(match_duration_seconds, score_limit)
+
+
+@rpc("any_peer", "reliable", "call_remote")
 func _rpc_request_toggle_hard_pause() -> void:
 	if not _is_authority():
 		return
@@ -438,13 +494,18 @@ func _rebuild_roster_for_current_mode() -> void:
 	if NetworkManager.is_online:
 		if _is_authority():
 			var local_peer_id := NetworkManager.get_local_peer_id()
+			var prev_local_entry: Dictionary = previous_roster.get(local_peer_id, {})
+			var local_team_id := int(prev_local_entry.get("team_id", GameEnums.TeamId.NEUTRAL))
+			var local_name := str(prev_local_entry.get("name", GameSettings.player_name))
+			var local_admin := bool(prev_local_entry.get("is_admin", true))
 			_roster[local_peer_id] = _make_roster_entry(
 				local_peer_id,
-				GameSettings.player_name,
-				GameEnums.TeamId.NEUTRAL,
-				true,
+				local_name,
+				local_team_id,
+				local_admin,
 				true
 			)
+			_update_field_player_from_roster(local_peer_id, true)
 
 			for peer_id in NetworkManager.get_connected_peer_ids():
 				if peer_id == local_peer_id:
@@ -591,7 +652,7 @@ func _update_field_player_from_roster(peer_id: int, reposition: bool) -> void:
 	if created or reposition:
 		player.set_spawn_position(_get_random_spawn_position(team_id, peer_id))
 		player.reset_to_spawn()
-	player.set_input_enabled(not _match_over)
+	player.set_input_enabled(_match_started and not _match_over and not _hard_paused)
 	if created or previous_team != team_id:
 		player.queue_redraw()
 
@@ -689,7 +750,7 @@ func _configure_match_activity(active: bool) -> void:
 
 
 func _apply_simulation_state() -> void:
-	var simulation_active := not _match_over and not _hard_paused
+	var simulation_active := _match_started and not _match_over and not _hard_paused
 	_configure_match_activity(simulation_active)
 	if _is_authority():
 		if simulation_active and not _overtime_active:
@@ -827,6 +888,7 @@ func _build_room_state_snapshot(viewer_peer_id: int) -> Dictionary:
 		"spectators": spectator_entries,
 		"blue": blue_entries,
 		"can_manage": _can_manage_roster(viewer_peer_id),
+		"match_started": _match_started,
 		"match_over": _match_over,
 		"overtime": _overtime_active,
 		"match_duration_seconds": _match_duration_seconds,
@@ -851,6 +913,8 @@ func _serialize_room_entry(entry: Dictionary) -> Dictionary:
 
 func _apply_room_state_snapshot(snapshot: Dictionary) -> void:
 	var previous_match_over := _match_over
+	var previous_match_started := _match_started
+	_match_started = bool(snapshot.get("match_started", _match_started))
 	_match_over = bool(snapshot.get("match_over", _match_over))
 	_overtime_active = bool(snapshot.get("overtime", _overtime_active))
 	_match_duration_seconds = float(snapshot.get("match_duration_seconds", _match_duration_seconds))
@@ -880,6 +944,11 @@ func _apply_room_state_snapshot(snapshot: Dictionary) -> void:
 	elif previous_match_over and not _match_over and is_paused:
 		is_paused = false
 		pause_changed.emit(false)
+	elif not previous_match_started and _match_started and is_paused and not _match_over:
+		is_paused = false
+		pause_changed.emit(false)
+	elif previous_match_started and not _match_started and is_paused:
+		_set_state(GameEnums.MatchState.PAUSED)
 	room_state_changed.emit(snapshot)
 
 
@@ -908,6 +977,7 @@ func _broadcast_world_state() -> void:
 		"bs": blue_score,
 		"timer": time_system.remaining_seconds,
 		"ms": state_machine.current_state,
+		"started": _match_started,
 		"hp": _hard_paused,
 		"match_over": _match_over,
 		"ot": _overtime_active,
@@ -927,8 +997,10 @@ func _apply_world_state_snapshot(snapshot: Dictionary) -> void:
 	var prev_blue := blue_score
 	var prev_match_over := _match_over
 	var prev_overtime := _overtime_active
+	var prev_match_started := _match_started
 	red_score = int(snapshot.get("rs", red_score))
 	blue_score = int(snapshot.get("bs", blue_score))
+	_match_started = bool(snapshot.get("started", _match_started))
 	_match_over = bool(snapshot.get("match_over", false))
 	_overtime_active = bool(snapshot.get("ot", false))
 	_match_duration_seconds = float(snapshot.get("md", _match_duration_seconds))
@@ -943,8 +1015,9 @@ func _apply_world_state_snapshot(snapshot: Dictionary) -> void:
 	score_changed.emit(red_score, blue_score)
 	var server_timer := float(snapshot.get("timer", time_system.remaining_seconds))
 	time_system.remaining_seconds = server_timer
-	time_system.running = not _match_over and not _hard_paused and not _overtime_active
+	time_system.running = _match_started and not _match_over and not _hard_paused and not _overtime_active
 	_set_state(int(snapshot.get("ms", state_machine.current_state)) as GameEnums.MatchState)
+	_configure_match_activity(_match_started and not _match_over and not _hard_paused)
 
 	# Client-side goal announcement
 	if red_score > prev_red:
@@ -953,6 +1026,11 @@ func _apply_world_state_snapshot(snapshot: Dictionary) -> void:
 		announcement_requested.emit("%s scored" % Helpers.team_name(GameEnums.TeamId.BLUE), Helpers.team_color(GameEnums.TeamId.BLUE), 1.0)
 	if _overtime_active and not prev_overtime:
 		announcement_requested.emit("Overtime - ilk gol kazanir", Color(1.0, 0.95, 0.72, 1.0), 1.2)
+	if prev_match_started and not _match_started:
+		_set_state(GameEnums.MatchState.PAUSED)
+	elif not prev_match_started and _match_started and is_paused and not _match_over:
+		is_paused = false
+		pause_changed.emit(false)
 
 	# Client-side match end handling
 	if _match_over and not prev_match_over:
@@ -1072,6 +1150,21 @@ func _resolve_match_duration_seconds() -> float:
 
 func _resolve_score_limit() -> int:
 	return maxi(GameSettings.MIN_SCORE_LIMIT, mini(GameSettings.MAX_SCORE_LIMIT, NetworkManager.active_score_limit))
+
+
+func _apply_match_rules_authority(match_duration_seconds: float, score_limit: int) -> void:
+	_match_duration_seconds = clampf(match_duration_seconds, GameSettings.MIN_MATCH_DURATION_SECONDS, GameSettings.MAX_MATCH_DURATION_SECONDS)
+	_score_limit = maxi(GameSettings.MIN_SCORE_LIMIT, mini(GameSettings.MAX_SCORE_LIMIT, score_limit))
+	NetworkManager.active_match_duration_seconds = _match_duration_seconds
+	NetworkManager.active_score_limit = _score_limit
+	if not _match_started:
+		time_system.setup(_match_duration_seconds)
+		time_system.stop()
+		timer_changed.emit(time_system.remaining_seconds)
+	if NetworkManager.is_online and _is_authority():
+		NetworkManager.update_lobby_settings(_match_duration_seconds, _score_limit)
+	_broadcast_room_state()
+	_broadcast_world_state()
 
 
 func _submit_local_name_deferred() -> void:

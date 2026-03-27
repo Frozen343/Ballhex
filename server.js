@@ -54,6 +54,20 @@ app.post("/api/lobbies", (req, res) => {
   res.status(201).json(serializeLobby(lobby));
 });
 
+app.patch("/api/lobbies/:id/settings", (req, res) => {
+  pruneStaleLobbies();
+
+  const lobby = lobbies.get(req.params.id || "");
+  if (!lobby) {
+    res.status(404).json({ error: "Lobby not found." });
+    return;
+  }
+
+  lobby.matchDurationSeconds = sanitizeMatchDurationSeconds(req.body?.matchDurationSeconds);
+  lobby.scoreLimit = sanitizeScoreLimit(req.body?.scoreLimit);
+  res.json(serializeLobby(lobby));
+});
+
 app.use(express.static(WEB_DIR));
 app.get("/", (_req, res) => {
   res.sendFile(path.join(WEB_DIR, "index.html"));

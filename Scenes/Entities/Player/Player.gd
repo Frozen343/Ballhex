@@ -7,7 +7,7 @@ signal kick_attempted(player: HexPlayer)
 @export var team_id := GameEnums.TeamId.RED
 @export var display_name := "P1"
 @export var move_speed := 138.0
-@export var drive_force := 11000.0
+@export var drive_force := 2800.0
 @export var ground_friction := 138.0
 @export var body_mass := 6.0
 @export var body_restitution := 0.12
