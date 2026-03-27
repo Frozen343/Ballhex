@@ -1,6 +1,9 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://Scenes/Menus/WelcomeScreen.gd" id="1"]
+[ext_resource type="Texture2D" path="res://Assets/main_menu_bg.png" id="2"]
+[ext_resource type="Texture2D" path="res://Assets/logo-transparent.png" id="3"]
+[ext_resource type="Texture2D" path="res://Assets/player_main_trans.png" id="4"]
 
 [node name="WelcomeScreen" type="Control"]
 layout_mode = 3
@@ -11,156 +14,123 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1")
 
-[node name="BackgroundTop" type="ColorRect" parent="."]
+[node name="Background" type="TextureRect" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.03, 0.11, 0.16, 1)
+texture = ExtResource("2")
+expand_mode = 1
+stretch_mode = 6
 
-[node name="BackgroundBottom" type="ColorRect" parent="."]
+[node name="BackgroundOverlay" type="ColorRect" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.02, 0.06, 0.1, 0.76)
+color = Color(0.02, 0.06, 0.1, 0.16)
 
-[node name="BackdropGlowLeft" type="ColorRect" parent="."]
+[node name="HexGlowLeft" type="ColorRect" parent="."]
 layout_mode = 1
-anchors_preset = 0
 offset_left = -120.0
-offset_top = -60.0
-offset_right = 420.0
-offset_bottom = 520.0
-color = Color(0.36, 0.69, 1, 0.14)
+offset_top = 30.0
+offset_right = 360.0
+offset_bottom = 460.0
+color = Color(0.18, 0.48, 0.92, 0.1)
 
-[node name="BackdropGlowRight" type="ColorRect" parent="."]
+[node name="HexGlowRight" type="ColorRect" parent="."]
 layout_mode = 1
-anchors_preset = 0
 anchor_left = 1.0
 anchor_right = 1.0
-offset_left = -460.0
-offset_top = 80.0
+offset_left = -360.0
+offset_top = 60.0
 offset_right = 120.0
-offset_bottom = 640.0
-color = Color(0.62, 0.93, 0.34, 0.14)
+offset_bottom = 460.0
+color = Color(0.44, 0.94, 0.76, 0.08)
 
-[node name="HeroBall" type="Panel" parent="."]
-custom_minimum_size = Vector2(280, 280)
+[node name="Logo" type="TextureRect" parent="."]
+custom_minimum_size = Vector2(0, 170)
 layout_mode = 1
-anchors_preset = 8
+anchors_preset = 10
 anchor_left = 0.5
-anchor_top = 0.5
 anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -140.0
-offset_top = -170.0
-offset_right = 140.0
-offset_bottom = 110.0
+grow_horizontal = 2
+offset_left = -260.0
+offset_top = 34.0
+offset_right = 260.0
+offset_bottom = 204.0
+texture = ExtResource("3")
+expand_mode = 1
+stretch_mode = 5
 
-[node name="GlowRing" type="Panel" parent="HeroBall"]
+[node name="ActionCard" type="Panel" parent="."]
+custom_minimum_size = Vector2(0, 132)
+layout_mode = 1
+anchors_preset = 10
+anchor_left = 0.5
+anchor_right = 0.5
+grow_horizontal = 2
+offset_left = -330.0
+offset_top = 700.0
+offset_right = 330.0
+offset_bottom = 832.0
+
+[node name="CardMargin" type="MarginContainer" parent="ActionCard"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-offset_left = -16.0
-offset_top = -16.0
-offset_right = 16.0
-offset_bottom = 16.0
+theme_override_constants/margin_left = 28
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 28
+theme_override_constants/margin_bottom = 22
 
-[node name="HexStripeTop" type="Label" parent="HeroBall"]
-layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -86.0
-offset_top = -46.0
-offset_right = 86.0
-offset_bottom = -10.0
-text = "BALLHEX"
-horizontal_alignment = 1
-theme_override_font_sizes/font_size = 42
-theme_override_colors/font_color = Color(0.95, 0.98, 1, 1)
-
-[node name="HexStripeBottom" type="Label" parent="HeroBall"]
-layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -88.0
-offset_top = 0.0
-offset_right = 88.0
-offset_bottom = 30.0
-text = "ARCADE FOOTBALL"
-horizontal_alignment = 1
-theme_override_font_sizes/font_size = 18
-theme_override_colors/font_color = Color(0.75, 0.84, 0.9, 0.9)
-
-[node name="Margin" type="MarginContainer" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_constants/margin_left = 56
-theme_override_constants/margin_top = 36
-theme_override_constants/margin_right = 56
-theme_override_constants/margin_bottom = 40
-
-[node name="Layout" type="VBoxContainer" parent="Margin"]
-layout_mode = 2
-size_flags_vertical = 3
-alignment = 2
-theme_override_constants/separation = 20
-
-[node name="Header" type="VBoxContainer" parent="Margin/Layout"]
-layout_mode = 2
-size_flags_vertical = 3
-alignment = 1
-theme_override_constants/separation = 12
-
-[node name="Title" type="Label" parent="Margin/Layout/Header"]
-layout_mode = 2
-text = "Fast football.\nSmart lobbies.\nBig moments."
-horizontal_alignment = 1
-
-[node name="Subtitle" type="Label" parent="Margin/Layout/Header"]
-layout_mode = 2
-text = "Build your guest profile, jump into custom rooms, and get the ranked shell ready for launch."
-horizontal_alignment = 1
-autowrap_mode = 3
-
-[node name="Footer" type="VBoxContainer" parent="Margin/Layout"]
+[node name="CardLayout" type="VBoxContainer" parent="ActionCard/CardMargin"]
 layout_mode = 2
 theme_override_constants/separation = 14
 
-[node name="Actions" type="HBoxContainer" parent="Margin/Layout/Footer"]
+[node name="Actions" type="HBoxContainer" parent="ActionCard/CardMargin/CardLayout"]
 layout_mode = 2
-theme_override_constants/separation = 12
+theme_override_constants/separation = 24
 alignment = 1
 
-[node name="GuestButton" type="Button" parent="Margin/Layout/Footer/Actions"]
-custom_minimum_size = Vector2(260, 64)
+[node name="GuestButton" type="Button" parent="ActionCard/CardMargin/CardLayout/Actions"]
+custom_minimum_size = Vector2(0, 66)
 layout_mode = 2
-text = "Continue As Guest"
+size_flags_horizontal = 3
+text = "Continue as Guest"
 
-[node name="SignInButton" type="Button" parent="Margin/Layout/Footer/Actions"]
-custom_minimum_size = Vector2(220, 64)
+[node name="SignInButton" type="Button" parent="ActionCard/CardMargin/CardLayout/Actions"]
+custom_minimum_size = Vector2(0, 66)
 layout_mode = 2
+size_flags_horizontal = 3
 text = "Sign In"
 
-[node name="Status" type="Label" parent="Margin/Layout/Footer"]
+[node name="Status" type="Label" parent="ActionCard/CardMargin/CardLayout"]
 layout_mode = 2
-text = "Start with a guest profile. Sign-in can be connected later."
+text = "Guest mode is ready now. Account sign-in can be wired next."
 horizontal_alignment = 1
+
+[node name="PlayerAnchor" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 0.0
+z_index = 3
+
+[node name="PlayerMain" type="Sprite2D" parent="PlayerAnchor"]
+position = Vector2(0, -34)
+scale = Vector2(1.02, 1.02)
+texture = ExtResource("4")

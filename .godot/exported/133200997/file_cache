@@ -1,7 +1,7 @@
 res://Scenes/App/App.tscn::bd3649f7562287aeee46bdc2bb2eff09::1774293009::res://.godot/exported/133200997/export-763e493f45b5eca3ba8ea980e88afe09-App.scn
 res://Scenes/Entities/Ball/Ball.tscn::efea36fb8b3c707cdbcb2de02ec82ca3::1774293009::res://.godot/exported/133200997/export-c61d41f7f2918ae8627312a4a74a5548-Ball.scn
 res://Scenes/Entities/Goal/Goal.tscn::2cb6abef9dde4c1eb7cdba29305a866b::1774293009::res://.godot/exported/133200997/export-42afa6ec4486012af054681178a54716-Goal.scn
-res://Scenes/Entities/Player/Player.tscn::138c4498c23a9c16cfa661d44f1c8f97::1774631880::res://.godot/exported/133200997/export-6faa2cafb5404dcce6d3cb596def0bac-Player.scn
+res://Scenes/Entities/Player/Player.tscn::138c4498c23a9c16cfa661d44f1c8f97::1774632441::res://.godot/exported/133200997/export-6faa2cafb5404dcce6d3cb596def0bac-Player.scn
 res://Scenes/Match/Match.tscn::34d58c2082aece23a85f685954ec222d::1774293009::res://.godot/exported/133200997/export-8f07c4130d72e71ac5748ed63d4290ea-Match.scn
 res://Scenes/Match/Pitch.tscn::5a502343b6a86384e9361dc928d6a834::1774293009::res://.godot/exported/133200997/export-3932424059f483c431719b4338f04728-Pitch.scn
 res://Scenes/Menus/EndMatchPanel.tscn::617b6f650662ae185bbed70ef0d93180::1774293009::res://.godot/exported/133200997/export-1502e49c39522de7f133fc52fe6a9c12-EndMatchPanel.scn
@@ -13,4 +13,4 @@ res://Tests/Sandbox/BallTuning.tscn::10686ddeb23c2d2aa4f6af8b3de7a6fc::177429300
 res://Tests/Sandbox/CollisionTuning.tscn::4365ef51c5d5a6a48acaaf1d329332e9::1774293009::res://.godot/exported/133200997/export-fe0262b77e87f35296c33f7cfd33f273-CollisionTuning.scn
 res://Scenes/Menus/NicknameScreen.tscn::f231a9fd1e260c1d1bd3d3ab5008148f::1774631890::res://.godot/exported/133200997/export-630f0f1b3555c417cba912c4a73dfd2a-NicknameScreen.scn
 res://Scenes/Entities/IceShard/IceShard.tscn::f1412daf7727545faef07a70179984de::1774631880::res://.godot/exported/133200997/export-6cdca9a2d7b7d0fbed03d8648c0987cd-IceShard.scn
-res://Scenes/Menus/WelcomeScreen.tscn::8aa14ef60ca075ebcb272269bd1acfbe::1774628947::res://.godot/exported/133200997/export-07f0aaa9aac3a068cef7cdb6880fea3d-WelcomeScreen.scn
+res://Scenes/Menus/WelcomeScreen.tscn::f8831e3c425370edf6a443bae4b94605::1774634361::res://.godot/exported/133200997/export-07f0aaa9aac3a068cef7cdb6880fea3d-WelcomeScreen.scn

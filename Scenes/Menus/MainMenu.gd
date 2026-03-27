@@ -253,6 +253,7 @@ func _rebuild_room_cards() -> void:
 		button.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		UI.style_button(button, "secondary", 18)
 		button.pressed.connect(_on_room_card_pressed.bind(index))
+		button.gui_input.connect(_on_room_card_gui_input.bind(index))
 		room_list.add_child(button)
 		room_list.move_child(button, room_list.get_child_count() - 1)
 		_room_buttons.append(button)
@@ -276,6 +277,14 @@ func _on_room_card_pressed(index: int) -> void:
 	if lobby.is_empty():
 		return
 	status_label.text = "%s selected. Ready to join." % str(lobby.get("name", "Room"))
+
+
+func _on_room_card_gui_input(event: InputEvent, index: int) -> void:
+	if event is InputEventMouseButton:
+		var mouse_event := event as InputEventMouseButton
+		if mouse_event.button_index == MOUSE_BUTTON_LEFT and mouse_event.pressed and mouse_event.double_click:
+			_on_room_card_pressed(index)
+			_on_join_pressed()
 
 
 func _refresh_room_selection() -> void:

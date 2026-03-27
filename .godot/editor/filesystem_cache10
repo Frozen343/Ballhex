@@ -1,6 +1,5 @@
 63f7b34db8d8cdea90c76aacccf841ec
-::res://::1774632038
-.gitignore.txt::TextFile::-1::1774293009::0::1::::<><><>0<>0<><>::
+::res://::1774633031
 export_presets.cfg::TextFile::-1::1774632038::0::1::::<><><>0<>0<><>::
 icon.svg::CompressedTexture2D::2592738358081623052::1774293009::1774629796::1::::<><><>0<>0<>272c7866b8af2bbd23e210b1d9e583c3<>res://.godot/imported/icon.svg-218a8f2b3041327d8a5756f3a245f83b.ctex::
 package.json::JSON::-1::1774293009::0::1::::<><><>0<>0<><>::
@@ -8,6 +7,11 @@ render.yaml::TextFile::-1::1774293009::0::1::::<><><>0<>0<><>::
 UI-ART-PROMPTS.md::TextFile::-1::1774628301::0::1::::<><><>0<>0<><>::
 UI-SPEC.md::TextFile::-1::1774628093::0::1::::<><><>0<>0<><>::
 Workflow.md::TextFile::-1::1774293009::0::1::::<><><>0<>0<><>::
+::res://assets/::1774633357
+logo-transparent.png::CompressedTexture2D::2026672732626662583::1774632831::1774633032::1::::<><><>0<>0<>01b3eca4f95217fa58f05e13479472af<>res://.godot/imported/logo-transparent.png-13509055b04d07285ceae0b9c386bd39.ctex::
+main_menu_bg.png::CompressedTexture2D::8836140782990289234::1774632861::1774633034::1::::<><><>0<>0<>9b8297339478343cf2809fe58bac95ce<>res://.godot/imported/main_menu_bg.png-0ebeb2137dac1176e6b275a6c7477b27.ctex::
+player_main.png::CompressedTexture2D::1742148219321563584::1774633331::1774633364::1::::<><><>0<>0<>fb470ab501297eb83127817f91bfa3e6<>res://.godot/imported/player_main.png-aac9107fb8734e75b91268a52d420d7e.ctex::
+player_main_trans.png::CompressedTexture2D::2733270162232183163::1774633357::1774633363::1::::<><><>0<>0<>e208ee7f0175a7ea88f66298aea95fb9<>res://.godot/imported/player_main_trans.png-078554329f5ca74da09f765d372938a8.ctex::
 ::res://Autoload/::1774631890
 GameEvents.gd::GDScript::4144719522234533383::1774293009::0::1::::<>Node<><>0<>0<><>::
 GameSettings.gd::GDScript::284141995612680239::1774631890::0::1::::<>Node<><>0<>0<><>::
@@ -30,9 +34,9 @@ Goal.tscn::PackedScene::-1::1774293009::0::1::::<><><>0<>0<><>::res://Scenes/Ent
 ::res://Scenes/Entities/IceShard/::1774631880
 IceShard.gd::GDScript::3721207263638473530::1774631880::0::1::::IceShard<>Node2D<><>0<>0<><>::
 IceShard.tscn::PackedScene::-1::1774631880::0::1::::<><><>0<>0<><>::res://Scenes/Entities/IceShard/IceShard.gd
-::res://Scenes/Entities/Player/::1774631880
+::res://Scenes/Entities/Player/::1774632441
 Player.gd::GDScript::8557064698903819346::1774631880::0::1::::HexPlayer<>CharacterBody2D<><>0<>0<><>::
-Player.tscn::PackedScene::8781787504813554168::1774631880::0::1::::<><><>0<>0<><>::uid://dt6dut3f8fbhi::::res://Scenes/Entities/Player/Player.gd<>uid://cabeja7j8r5vs::::res://Scripts/Components/CooldownComponent.gd
+Player.tscn::PackedScene::8781787504813554168::1774632441::0::1::::<><><>0<>0<><>::uid://dt6dut3f8fbhi::::res://Scenes/Entities/Player/Player.gd<>uid://cabeja7j8r5vs::::res://Scripts/Components/CooldownComponent.gd
 ::res://Scenes/Match/::1774631890
 Match.gd::GDScript::1349233418816609055::1774631890::0::1::::<>Node<><>0<>0<><>::
 Match.tscn::PackedScene::-1::1774293009::0::1::::<><><>0<>0<><>::res://Scenes/Match/Match.gd<>res://Scenes/Match/Pitch.tscn<>res://Scenes/Entities/Player/Player.tscn<>res://Scenes/Entities/Ball/Ball.tscn<>res://Scenes/Entities/Goal/Goal.tscn<>res://Scenes/Systems/StateMachine/MatchStateMachine.gd<>res://Scenes/Systems/ResetSystem/ResetSystem.gd<>res://Scenes/Systems/TimeSystem/TimeSystem.gd<>res://Scenes/Systems/MatchManager/MatchManager.gd<>res://Scenes/UI/Hud/MatchHUD.tscn<>res://Scenes/Menus/PauseMenu.tscn<>res://Scenes/Menus/EndMatchPanel.tscn<>res://Scenes/Systems/Debug/DebugOverlay.tscn
@@ -41,7 +45,7 @@ Pitch.tscn::PackedScene::-1::1774293009::0::1::::<><><>0<>0<><>::res://Scenes/Ma
 ::res://Scenes/Menus/::1774631890
 EndMatchPanel.gd::GDScript::8486013254273532779::1774631890::0::1::::EndMatchPanel<>Control<><>0<>0<><>::
 EndMatchPanel.tscn::PackedScene::-1::1774293009::0::1::::<><><>0<>0<><>::res://Scenes/Menus/EndMatchPanel.gd
-MainMenu.gd::GDScript::1854781367425028814::1774631890::0::1::::MainMenu<>Control<><>0<>0<><>::
+MainMenu.gd::GDScript::1854781367425028814::1774632682::0::1::::MainMenu<>Control<><>0<>0<><>::
 MainMenu.tscn::PackedScene::-1::1774631890::0::1::::<><><>0<>0<><>::res://Scenes/Menus/MainMenu.gd
 NicknameScreen.gd::GDScript::2357598796237272252::1774631890::0::1::::<>Control<><>0<>0<><>::
 NicknameScreen.tscn::PackedScene::-1::1774631890::0::1::::<><><>0<>0<><>::res://Scenes/Menus/NicknameScreen.gd
@@ -82,7 +86,7 @@ BallhexUI.gd::GDScript::623431606791613537::1774630851::0::1::::BallhexUI<>RefCo
 ::res://Tests/Sandbox/::1774293009
 BallTuning.tscn::PackedScene::-1::1774293009::0::1::::<><><>0<>0<><>::res://Scenes/Match/Match.tscn
 CollisionTuning.tscn::PackedScene::-1::1774293009::0::1::::<><><>0<>0<><>::res://Scenes/Match/Match.tscn
-::res://web/::1774632052
+::res://web/::1774632054
 index.apple-touch-icon.png::CompressedTexture2D::9081804540101102021::1774632038::1774632054::1::::<><><>0<>0<>e5290dc20956f3759556f6781d62303f<>res://.godot/imported/index.apple-touch-icon.png-939ec69c79bbf504b92ad8ceed469d51.ctex::
 index.icon.png::CompressedTexture2D::908302873191352393::1774632038::1774632054::1::::<><><>0<>0<>9b5707ca874117937724f629c0d8c457<>res://.godot/imported/index.icon.png-c615af856eabc03ca93d51f6a8f07b60.ctex::
 index.png::CompressedTexture2D::3797205543627573583::1774632038::1774632054::1::::<><><>0<>0<>054e81fa7c8c84c4990146f3d9c4d483<>res://.godot/imported/index.png-80964ad67552d78b1e33f58ad16188ff.ctex::

@@ -1,5 +1,0 @@
-.godot/
-.import/
-web/
-*.wasm
-*.pck
