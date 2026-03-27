@@ -30,17 +30,17 @@ grow_vertical = 2
 color = Color(0.02, 0.03, 0.04, 0.62)
 
 [node name="Card" type="Panel" parent="Backdrop"]
-custom_minimum_size = Vector2(960, 560)
+custom_minimum_size = Vector2(1120, 660)
 layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -480.0
-offset_top = -280.0
-offset_right = 480.0
-offset_bottom = 280.0
+anchors_preset = 15
+anchor_left = 0.04
+anchor_top = 0.05
+anchor_right = 0.96
+anchor_bottom = 0.95
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 0.0
+offset_bottom = 0.0
 
 [node name="Margin" type="MarginContainer" parent="Backdrop/Card"]
 layout_mode = 1
@@ -49,41 +49,44 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 18
-theme_override_constants/margin_top = 16
-theme_override_constants/margin_right = 18
-theme_override_constants/margin_bottom = 18
+theme_override_constants/margin_left = 28
+theme_override_constants/margin_top = 28
+theme_override_constants/margin_right = 28
+theme_override_constants/margin_bottom = 26
 
 [node name="Layout" type="VBoxContainer" parent="Backdrop/Card/Margin"]
 layout_mode = 2
-theme_override_constants/separation = 14
+theme_override_constants/separation = 16
 
 [node name="TopBar" type="HBoxContainer" parent="Backdrop/Card/Margin/Layout"]
+custom_minimum_size = Vector2(0, 62)
 layout_mode = 2
+theme_override_constants/separation = 14
 
 [node name="RoomName" type="Label" parent="Backdrop/Card/Margin/Layout/TopBar"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Room"
-theme_override_font_sizes/font_size = 30
+theme_override_font_sizes/font_size = 28
+vertical_alignment = 1
 
 [node name="Buttons" type="HBoxContainer" parent="Backdrop/Card/Margin/Layout/TopBar"]
 layout_mode = 2
-theme_override_constants/separation = 8
+theme_override_constants/separation = 10
 
 [node name="ResumeButton" type="Button" parent="Backdrop/Card/Margin/Layout/TopBar/Buttons"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 42)
+custom_minimum_size = Vector2(110, 44)
 text = "Resume"
 
 [node name="RestartButton" type="Button" parent="Backdrop/Card/Margin/Layout/TopBar/Buttons"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 42)
+custom_minimum_size = Vector2(150, 44)
 text = "Restart"
 
 [node name="MenuButton" type="Button" parent="Backdrop/Card/Margin/Layout/TopBar/Buttons"]
 layout_mode = 2
-custom_minimum_size = Vector2(0, 42)
+custom_minimum_size = Vector2(110, 44)
 text = "Leave"
 
 [node name="Divider" type="ColorRect" parent="Backdrop/Card/Margin/Layout"]
@@ -94,7 +97,7 @@ color = Color(0.82, 0.18, 0.2, 1)
 [node name="Body" type="VBoxContainer" parent="Backdrop/Card/Margin/Layout"]
 layout_mode = 2
 size_flags_vertical = 3
-theme_override_constants/separation = 12
+theme_override_constants/separation = 14
 
 [node name="ResultLabel" type="Label" parent="Backdrop/Card/Margin/Layout/Body"]
 layout_mode = 2
@@ -109,7 +112,7 @@ theme_override_constants/separation = 10
 [node name="DurationInput" type="SpinBox" parent="Backdrop/Card/Margin/Layout/Body/RulesRow"]
 layout_mode = 2
 size_flags_horizontal = 3
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 48)
 min_value = 1.0
 max_value = 15.0
 step = 1.0
@@ -119,7 +122,7 @@ prefix = "Minutes: "
 [node name="ScoreLimitInput" type="SpinBox" parent="Backdrop/Card/Margin/Layout/Body/RulesRow"]
 layout_mode = 2
 size_flags_horizontal = 3
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 48)
 min_value = 1.0
 max_value = 20.0
 step = 1.0
@@ -145,7 +148,7 @@ theme_override_font_sizes/font_size = 22
 theme_override_colors/font_color = Color(0.97, 0.39, 0.34, 1)
 
 [node name="RedList" type="ItemList" parent="Backdrop/Card/Margin/Layout/Body/Columns/RedColumn"]
-custom_minimum_size = Vector2(0, 280)
+custom_minimum_size = Vector2(0, 320)
 layout_mode = 2
 size_flags_vertical = 3
 allow_reselect = true
@@ -165,7 +168,7 @@ horizontal_alignment = 1
 theme_override_font_sizes/font_size = 22
 
 [node name="SpectatorsList" type="ItemList" parent="Backdrop/Card/Margin/Layout/Body/Columns/SpectatorsColumn"]
-custom_minimum_size = Vector2(0, 280)
+custom_minimum_size = Vector2(0, 320)
 layout_mode = 2
 size_flags_vertical = 3
 allow_reselect = true
@@ -186,7 +189,7 @@ theme_override_font_sizes/font_size = 22
 theme_override_colors/font_color = Color(0.43, 0.64, 1, 1)
 
 [node name="BlueList" type="ItemList" parent="Backdrop/Card/Margin/Layout/Body/Columns/BlueColumn"]
-custom_minimum_size = Vector2(0, 280)
+custom_minimum_size = Vector2(0, 320)
 layout_mode = 2
 size_flags_vertical = 3
 allow_reselect = true
@@ -204,19 +207,19 @@ theme_override_constants/separation = 8
 [node name="SendRedButton" type="Button" parent="Backdrop/Card/Margin/Layout/Bottom/ManageRow"]
 layout_mode = 2
 size_flags_horizontal = 3
-custom_minimum_size = Vector2(0, 42)
+custom_minimum_size = Vector2(0, 46)
 text = "Send Red"
 
 [node name="SendSpectatorsButton" type="Button" parent="Backdrop/Card/Margin/Layout/Bottom/ManageRow"]
 layout_mode = 2
 size_flags_horizontal = 3
-custom_minimum_size = Vector2(0, 42)
+custom_minimum_size = Vector2(0, 46)
 text = "Spectate"
 
 [node name="SendBlueButton" type="Button" parent="Backdrop/Card/Margin/Layout/Bottom/ManageRow"]
 layout_mode = 2
 size_flags_horizontal = 3
-custom_minimum_size = Vector2(0, 42)
+custom_minimum_size = Vector2(0, 46)
 text = "Send Blue"
 
 [node name="HelperLabel" type="Label" parent="Backdrop/Card/Margin/Layout/Bottom"]

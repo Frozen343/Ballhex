@@ -103,7 +103,7 @@ func _connect_ui() -> void:
 func _center_world() -> void:
 	var viewport_size := get_viewport().get_visible_rect().size
 	var chat_height := match_hud.get_chat_panel_height()
-	var scoreboard_height := 44.0
+	var scoreboard_height := 88.0
 	var available_height := viewport_size.y - chat_height - scoreboard_height
 	var content_size := Vector2(
 		GameSettings.FIELD_SIZE.x + GameSettings.GOAL_DEPTH * 2.0 + 120.0,

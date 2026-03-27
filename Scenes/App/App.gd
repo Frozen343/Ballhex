@@ -1,6 +1,7 @@
 extends Node
 
 const MAIN_MENU_SCENE := preload("res://Scenes/Menus/MainMenu.tscn")
+const WELCOME_SCENE := preload("res://Scenes/Menus/WelcomeScreen.tscn")
 const NICKNAME_SCENE := preload("res://Scenes/Menus/NicknameScreen.tscn")
 const MATCH_SCENE := preload("res://Scenes/Match/Match.tscn")
 
@@ -12,10 +13,10 @@ var _current_screen: Node
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	SceneRouter.screen_requested.connect(_on_screen_requested)
-	if GameSettings.has_player_name():
+	if GameSettings.has_profile():
 		_show_screen(SceneRouter.SCREEN_MAIN_MENU, {})
 	else:
-		_show_screen(SceneRouter.SCREEN_NICKNAME, {})
+		_show_screen(SceneRouter.SCREEN_WELCOME, {})
 
 
 func _on_screen_requested(screen_name: String, payload: Dictionary) -> void:
@@ -28,6 +29,8 @@ func _show_screen(screen_name: String, payload: Dictionary) -> void:
 		_current_screen = null
 
 	match screen_name:
+		SceneRouter.SCREEN_WELCOME:
+			_current_screen = WELCOME_SCENE.instantiate()
 		SceneRouter.SCREEN_NICKNAME:
 			_current_screen = NICKNAME_SCENE.instantiate()
 		SceneRouter.SCREEN_MATCH:

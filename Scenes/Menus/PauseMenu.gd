@@ -1,6 +1,8 @@
 extends Control
 class_name PauseMenu
 
+const UI := preload("res://Scripts/UI/BallhexUI.gd")
+
 signal resume_requested
 signal restart_requested
 signal menu_requested
@@ -21,6 +23,8 @@ const ACTION_TOGGLE_ADMIN := 3
 @onready var room_name_label: Label = $Backdrop/Card/Margin/Layout/TopBar/RoomName
 @onready var status_label: Label = $Backdrop/Card/Margin/Layout/Body/ResultLabel
 @onready var helper_label: Label = $Backdrop/Card/Margin/Layout/Bottom/HelperLabel
+@onready var card: Panel = $Backdrop/Card
+@onready var dim_layer: ColorRect = $Backdrop/Dim
 @onready var red_list: ItemList = $Backdrop/Card/Margin/Layout/Body/Columns/RedColumn/RedList
 @onready var spectators_list: ItemList = $Backdrop/Card/Margin/Layout/Body/Columns/SpectatorsColumn/SpectatorsList
 @onready var blue_list: ItemList = $Backdrop/Card/Margin/Layout/Body/Columns/BlueColumn/BlueList
@@ -61,6 +65,7 @@ func _ready() -> void:
 	spectators_list.item_clicked.connect(_on_item_clicked.bind("spectators", spectators_list))
 	blue_list.item_clicked.connect(_on_item_clicked.bind("blue", blue_list))
 	context_menu.id_pressed.connect(_on_context_menu_pressed)
+	_apply_styles()
 	_setup_drag_drop()
 	_setup_randomize_button()
 	hide_panel()
@@ -90,6 +95,9 @@ func update_room_state(snapshot: Dictionary) -> void:
 func show_panel() -> void:
 	visible = true
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	modulate.a = 0.0
+	var tween := create_tween()
+	tween.tween_property(self, "modulate:a", 1.0, 0.16)
 
 
 func hide_panel() -> void:
@@ -118,7 +126,7 @@ func _refresh_result_label(snapshot: Dictionary) -> void:
 	else:
 		status_label.text = "Score: Red %d - %d Blue" % [red_score, blue_score]
 		resume_button.text = "Resume"
-	var manage_hint := "Drag players between columns or use buttons below" if _can_manage else "ESC ile odayi acip kapatabilirsin."
+	var manage_hint := "Drag players between lanes or use the action bar" if _can_manage else "Use ESC to check the room and jump back in."
 	helper_label.text = "%s   Time: %s   Goal limit: %d" % [manage_hint, Helpers.format_match_time(match_duration_seconds), score_limit]
 	restart_button.visible = _can_manage
 	restart_button.disabled = not _can_manage
@@ -288,6 +296,7 @@ func _list_get_drag_data(at_position: Vector2, source_column: String) -> Variant
 	preview.add_theme_font_size_override("font_size", 18)
 	preview.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.95))
 	var preview_panel := PanelContainer.new()
+	preview_panel.add_theme_stylebox_override("panel", UI.make_panel(Color(0.09, 0.15, 0.2, 0.96), Color(1, 1, 1, 0.1), 18))
 	preview_panel.add_child(preview)
 	set_drag_preview(preview_panel)
 
@@ -334,7 +343,43 @@ func _setup_randomize_button() -> void:
 	var bottom_node := $Backdrop/Card/Margin/Layout/Bottom
 	_randomize_button = Button.new()
 	_randomize_button.text = "Random Teams"
-	_randomize_button.custom_minimum_size = Vector2(0, 32)
+	_randomize_button.custom_minimum_size = Vector2(0, 44)
 	_randomize_button.visible = false
 	_randomize_button.pressed.connect(func() -> void: randomize_teams_requested.emit())
 	bottom_node.add_child(_randomize_button)
+	UI.style_button(_randomize_button, "secondary", 16)
+
+
+func _apply_styles() -> void:
+	UI.style_panel(card, UI.COLOR_SURFACE, Color(1, 1, 1, 0.08), 28)
+	dim_layer.color = Color(0.01, 0.03, 0.05, 0.74)
+	UI.style_button(resume_button, "blue", 15)
+	UI.style_button(restart_button, "primary", 15)
+	UI.style_button(menu_button, "danger", 15)
+	UI.style_button(send_red_button, "secondary", 16)
+	UI.style_button(send_spectators_button, "ghost", 16)
+	UI.style_button(send_blue_button, "secondary", 16)
+	UI.style_spinbox(duration_input)
+	UI.style_spinbox(score_limit_input)
+	UI.style_label(room_name_label, 28)
+	room_name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	UI.style_label(status_label, 22)
+	UI.style_label(helper_label, 15, UI.COLOR_MUTED)
+	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	helper_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_style_item_list(red_list, Color(0.36, 0.14, 0.15, 0.72), UI.COLOR_RED)
+	_style_item_list(spectators_list, Color(0.13, 0.17, 0.21, 0.72), UI.COLOR_GOLD)
+	_style_item_list(blue_list, Color(0.11, 0.18, 0.28, 0.72), UI.COLOR_BLUE)
+	context_menu.add_theme_color_override("font_color", UI.COLOR_TEXT)
+	context_menu.add_theme_color_override("font_hover_color", UI.COLOR_TEXT)
+	context_menu.add_theme_color_override("font_disabled_color", Color(1, 1, 1, 0.45))
+
+
+func _style_item_list(list_control: ItemList, bg: Color, accent: Color) -> void:
+	list_control.add_theme_font_size_override("font_size", 18)
+	list_control.add_theme_color_override("font_color", UI.COLOR_TEXT)
+	list_control.add_theme_color_override("font_selected_color", UI.COLOR_TEXT)
+	list_control.add_theme_color_override("guide_color", Color(1, 1, 1, 0.04))
+	list_control.add_theme_stylebox_override("panel", UI.make_panel(bg, Color(1, 1, 1, 0.06), 22))
+	var selected := UI.make_panel(accent.darkened(0.2), accent, 20)
+	list_control.add_theme_stylebox_override("selected", selected)

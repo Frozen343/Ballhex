@@ -68,6 +68,7 @@ const INPUT_BINDINGS := {
 
 var debug_overlay_enabled := true
 var player_name := ""
+var avatar_id := 0
 var chat_active := false
 
 
@@ -80,8 +81,17 @@ func has_player_name() -> bool:
 	return not player_name.strip_edges().is_empty()
 
 
+func has_profile() -> bool:
+	return has_player_name()
+
+
 func set_player_name(value: String) -> void:
 	player_name = sanitize_player_name(value)
+	_save_settings()
+
+
+func set_avatar_id(value: int) -> void:
+	avatar_id = maxi(0, value)
 	_save_settings()
 
 
@@ -99,13 +109,16 @@ func _load_settings() -> void:
 	var error := config.load(SETTINGS_FILE_PATH)
 	if error != OK:
 		player_name = ""
+		avatar_id = 0
 		return
 	player_name = sanitize_player_name(str(config.get_value("profile", "player_name", "")))
+	avatar_id = int(config.get_value("profile", "avatar_id", 0))
 
 
 func _save_settings() -> void:
 	var config := ConfigFile.new()
 	config.set_value("profile", "player_name", player_name)
+	config.set_value("profile", "avatar_id", avatar_id)
 	config.save(SETTINGS_FILE_PATH)
 
 

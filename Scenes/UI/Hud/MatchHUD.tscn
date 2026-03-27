@@ -18,10 +18,10 @@ anchors_preset = 10
 anchor_right = 1.0
 grow_horizontal = 2
 offset_top = 4.0
-offset_bottom = 40.0
+offset_bottom = 54.0
 
 [node name="Panel" type="Panel" parent="Scoreboard"]
-custom_minimum_size = Vector2(0, 36)
+custom_minimum_size = Vector2(0, 54)
 layout_mode = 2
 size_flags_horizontal = 4
 
@@ -32,33 +32,48 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 16
-theme_override_constants/margin_top = 4
-theme_override_constants/margin_right = 16
-theme_override_constants/margin_bottom = 4
+theme_override_constants/margin_left = 22
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 22
+theme_override_constants/margin_bottom = 8
 
 [node name="HBox" type="HBoxContainer" parent="Scoreboard/Panel/Margin"]
 layout_mode = 2
-theme_override_constants/separation = 18
+theme_override_constants/separation = 28
 alignment = 1
 
 [node name="RedScore" type="Label" parent="Scoreboard/Panel/Margin/HBox"]
 layout_mode = 2
 text = "RED 0"
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 22
 theme_override_colors/font_color = Color(0.976471, 0.301961, 0.301961, 1)
 
 [node name="Timer" type="Label" parent="Scoreboard/Panel/Margin/HBox"]
 layout_mode = 2
 text = "02:00"
-theme_override_font_sizes/font_size = 20
+theme_override_font_sizes/font_size = 24
 theme_override_colors/font_color = Color(0.937255, 0.94902, 0.972549, 1)
 
 [node name="BlueScore" type="Label" parent="Scoreboard/Panel/Margin/HBox"]
 layout_mode = 2
 text = "0 BLUE"
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 22
 theme_override_colors/font_color = Color(0.278431, 0.627451, 1, 1)
+
+[node name="ModeTag" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 10
+anchor_left = 0.5
+anchor_right = 0.5
+grow_horizontal = 2
+offset_left = -130.0
+offset_top = 62.0
+offset_right = 130.0
+offset_bottom = 84.0
+text = "CUSTOM ROOM"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0.86, 0.92, 0.97, 0.76)
 
 [node name="Announcement" type="Label" parent="."]
 layout_mode = 1
@@ -109,7 +124,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.48, 0.48, 0.48, 0.18)
+color = Color(0.35, 0.47, 0.56, 0.1)
 
 [node name="Dim" type="ColorRect" parent="PauseOverlay"]
 layout_mode = 1
@@ -118,7 +133,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0, 0, 0, 0.2)
+color = Color(0.01, 0.03, 0.05, 0.34)
 
 [node name="PausedLabel" type="Label" parent="PauseOverlay"]
 layout_mode = 1
